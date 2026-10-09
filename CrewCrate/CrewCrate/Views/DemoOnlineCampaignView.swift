@@ -12,7 +12,9 @@ struct DemoOnlineCampaignView: View {
             }
             Section("Performance") {
                 LabeledContent("Recipients", value: "\(campaign.recipients)")
-                LabeledContent("Messages sent", value: "\(campaign.messagesSent)")
+                NavigationLink { DemoMessagesSentView(viewModel: viewModel.messagesSent()) } label: {
+                    LabeledContent("Messages sent", value: "\(campaign.messagesSent)")
+                }
                 ProgressView("Contacted", value: viewModel.contactProgress, total: 1)
                 LabeledContent("Replies", value: "\(campaign.replies)")
                 LabeledContent("Reply rate", value: viewModel.replyRate.formatted(.percent.precision(.fractionLength(0))))
