@@ -3,6 +3,7 @@ import Observation
 
 @MainActor @Observable
 final class CampaignListViewModel {
+    let onlineDemo = DemoOnlineCampaign.sample
     let name: String
     private(set) var records: [CampaignRecord] = []
     private(set) var isBusy = false

@@ -8,6 +8,15 @@ struct CampaignListView: View {
         List {
             Section { Text(viewModel.name).font(.headline); MessagingBoundaryNotice(isDemo: viewModel.isDemo) }
             if let error = viewModel.errorMessage { Section { Text(error).foregroundStyle(.red) } }
+            Section("Demo preview") {
+                NavigationLink { DemoOnlineCampaignView() } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(viewModel.onlineDemo.title).font(.headline)
+                        Label("Online · Demo", systemImage: "circle.fill").font(.caption).foregroundStyle(.green)
+                        Text("Fully prepared sample · \(viewModel.onlineDemo.recipients) recipients").font(.caption).foregroundStyle(.secondary)
+                    }.padding(.vertical, 4)
+                }
+            }
             Section("Campaigns") {
                 if viewModel.records.isEmpty && !viewModel.isBusy { Text("Create your first campaign.").foregroundStyle(.secondary) }
                 ForEach(viewModel.records) { campaign in
