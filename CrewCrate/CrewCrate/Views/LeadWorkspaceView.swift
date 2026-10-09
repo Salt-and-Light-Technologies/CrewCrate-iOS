@@ -26,7 +26,7 @@ struct LeadWorkspaceView: View {
                     LabeledContent("Stored leads", value: "\(workspace.totalLeads)")
                     ForEach(LeadStatus.allCases) { status in LabeledContent(status.title, value: "\(workspace.counts[status, default: 0])") }
                     LabeledContent("Imports", value: "\(workspace.importCount)")
-                    Text("Eligibility is a review classification; it does not verify consent or launch a campaign.").font(.caption).foregroundStyle(.secondary)
+                    Text("Recorded SMS permission marks contacts Eligible. Revoked permission or an opt-out marks them Excluded. Contacts with unknown permission can be reviewed manually.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Import a lead list") {
                     if workspace.canImport {
@@ -99,11 +99,15 @@ struct LeadWorkspaceView: View {
                             if !lead.permissionEvidence.isEmpty { Text(lead.permissionEvidence).font(.caption).foregroundStyle(.secondary) }
                             Button("Record permission or opt-out") { permissionEvidence = ""; permissionLead = lead }.disabled(workspace.status == .paused)
                             if !lead.email.isEmpty { LabeledContent("Email", value: lead.email).textSelection(.enabled) }
+                            if lead.smsPermission == "unknown" && !lead.optedOut {
                             Menu("Change review status") {
                                 ForEach(LeadStatus.allCases) { status in
                                     Button(status.title) { Task { await viewModel.classify(lead, as: status) } }
                                 }
                             }.disabled(workspace.status == .paused)
+                            } else {
+                                Text("Review status follows SMS permission and opt-out.").font(.caption).foregroundStyle(.secondary)
+                            }
                         } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(lead.name.isEmpty ? lead.phone : lead.name).font(.headline)
@@ -155,7 +159,7 @@ struct LeadWorkspaceView: View {
         .sheet(item: $permissionLead) { lead in
             NavigationStack {
                 Form {
-                    Section { Text("Record an evidence reference or opt-out reason. This is a team assertion, not automated verification of contact permission.").font(.subheadline) }
+                    Section { Text("Recording SMS permission automatically marks this contact Eligible. Recording an opt-out marks them Excluded. Add an evidence reference or opt-out reason.").font(.subheadline) }
                     Section {
                         Text(lead.name.isEmpty ? lead.phone : lead.name).font(.headline)
                         TextField("Evidence reference or reason", text: $permissionEvidence, axis: .vertical).lineLimit(3...8)

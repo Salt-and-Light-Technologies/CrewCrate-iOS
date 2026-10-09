@@ -114,6 +114,8 @@ extension DemoPartnerRepository: LeadRepository {
         guard partner.status != .paused else { throw LeadRepositoryError.locked }
         var lead = leadRecords[partnerID]![index]
         guard lead.revision == expectedRevision else { throw LeadRepositoryError.conflict }
+        let automaticStatus: LeadStatus? = lead.optedOut || lead.smsPermission == "revoked" ? .excluded : (lead.smsPermission == "recorded" ? .eligible : nil)
+        if let automaticStatus, status != automaticStatus { throw CampaignError.invalid("Review status is determined by this contact's SMS permission and opt-out.") }
         let previous = lead.status
         lead.status = status; lead.revision += 1; leadRecords[partnerID]![index] = lead
         partner.revision += 1; partner.updatedAt = .now; partners[partnerID] = partner
@@ -133,6 +135,7 @@ extension DemoPartnerRepository {
         guard !lead.optedOut || permission == "revoked" else { throw CampaignError.invalid("Opted-out contacts cannot be re-enabled here.") }
         lead.smsPermission = permission; lead.permissionEvidence = evidence.trimmingCharacters(in: .whitespacesAndNewlines)
         if permission == "revoked" { lead.optedOut = true }
+        lead.status = permission == "recorded" && !lead.optedOut ? .eligible : .excluded
         lead.revision += 1; leadRecords[partnerID]![index] = lead
         partner.revision += 1; partner.updatedAt = .now; partners[partnerID] = partner
         leadActivities[partnerID, default: []].append(LeadActivity(id: UUID(), action: "SMS permission updated", actorName: "You (demo)", detail: "\(lead.name): \(permission)", timestamp: .now))
