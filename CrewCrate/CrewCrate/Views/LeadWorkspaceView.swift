@@ -85,12 +85,23 @@ struct LeadWorkspaceView: View {
                     Button("Apply filters") { Task { await viewModel.load() } }
                 }
                 Section("Leads") {
+                    if let campaign {
+                        LabeledContent("Selected for campaign", value: "\(campaign.config.leadIDs.count)")
+                        Button("Select all eligible recipients") { Task { await campaign.selectAllEligibleRecipients() } }
+                            .disabled(!campaign.canChangeRecipients || campaign.config.leadIDs.count >= 500)
+                        Button("Clear selection") { campaign.clearRecipients() }
+                            .disabled(!campaign.canChangeRecipients || campaign.config.leadIDs.isEmpty)
+                        Text("Selects eligible, opted-in contacts from the campaign's chosen lead list, including contacts on later pages, up to 500 total. Search filters do not limit Select All.").font(.caption).foregroundStyle(.secondary)
+                        if campaign.isBusy { ProgressView("Selecting recipients…") }
+                        if let error = campaign.errorMessage { Text(error).foregroundStyle(.red) }
+                        if let notice = campaign.notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
+                    }
                     if viewModel.leads.isEmpty { Text("No leads match the loaded filters. Import a list or change your filters.").foregroundStyle(.secondary) }
                     ForEach(viewModel.leads) { lead in
                         if let campaign {
                             Button { campaign.toggle(lead) } label: {
                                 Label(campaign.config.leadIDs.contains(lead.id) ? "Selected for campaign" : "Select for campaign", systemImage: campaign.config.leadIDs.contains(lead.id) ? "checkmark.circle.fill" : "circle")
-                            }.disabled(!campaign.config.leadIDs.contains(lead.id) && (lead.status != .eligible || lead.smsPermission != "recorded" || lead.optedOut))
+                            }.disabled(!campaign.canChangeRecipients || (!campaign.config.leadIDs.contains(lead.id) && (lead.status != .eligible || lead.smsPermission != "recorded" || lead.optedOut)))
                         }
                         DisclosureGroup {
                             LabeledContent("Phone", value: lead.phone).textSelection(.enabled)

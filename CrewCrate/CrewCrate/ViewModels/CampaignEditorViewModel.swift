@@ -116,7 +116,36 @@ final class CampaignEditorViewModel {
             candidates += page; candidatesTruncated = page.count == 50
         } catch { errorMessage = error.localizedDescription }
     }
+    var canChangeRecipients: Bool { !isBusy && !isLoading && record?.status != .paused && record?.status != .archived }
+    func selectAllEligibleRecipients() async {
+        guard canChangeRecipients else { return }
+        isBusy = true; errorMessage = nil; defer { isBusy = false }
+        let importID = selectedImportID
+        var selected = config.leadIDs
+        var known = Set(selected)
+        var offset = 0
+        do {
+            while selected.count < 500 {
+                try Task.checkCancellation()
+                let page = try await leads.leadsInImport(partnerID: partnerID, importID: importID, offset: offset)
+                for lead in page where lead.status == .eligible && lead.smsPermission == "recorded" && !lead.optedOut {
+                    if selected.count < 500 && known.insert(lead.id).inserted { selected.append(lead.id) }
+                }
+                offset += page.count
+                if page.count < 50 { break }
+            }
+            try Task.checkCancellation()
+            config.leadIDs = selected
+            notice = selected.count == 500 ? "500 recipients selected — the campaign limit. Save your draft to keep this selection." : "\(selected.count) recipients selected. Save your draft to keep this selection."
+        } catch is CancellationError { }
+        catch { errorMessage = error.localizedDescription }
+    }
+    func clearRecipients() {
+        guard canChangeRecipients else { return }
+        config.leadIDs = []
+    }
     func toggle(_ lead: LeadRecord) {
+        guard canChangeRecipients else { return }
         if config.leadIDs.contains(lead.id) { config.leadIDs.removeAll { $0 == lead.id } }
         else if config.leadIDs.count < 500 && lead.status == .eligible && lead.smsPermission == "recorded" && !lead.optedOut { config.leadIDs.append(lead.id) }
     }

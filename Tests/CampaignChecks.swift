@@ -78,6 +78,15 @@ actor CampaignTestHTTP: LeadHTTPTransport {
         check(vm.config.offer == "Unsaved edit" && vm.errorMessage != nil, "Refresh preserves unsaved edits")
         await vm.load(discardEdits: true)
         check(vm.config.offer != "Unsaved edit", "Explicit discard")
+        let selectionVM = CampaignEditorViewModel(partnerID: partnerID, id: nil, repository: fresh, leads: fresh, isDemo: true)
+        await selectionVM.load()
+        await selectionVM.selectAllEligibleRecipients()
+        let permitted = try await fresh.leads(partnerID: partnerID, search: "", status: .eligible, offset: 0).filter { $0.smsPermission == "recorded" && !$0.optedOut }
+        check(Set(selectionVM.config.leadIDs) == Set(permitted.map(\.id)), "Select All excludes unknown permission and opt-outs")
+        await selectionVM.selectAllEligibleRecipients()
+        check(selectionVM.config.leadIDs.count == Set(selectionVM.config.leadIDs).count, "Select All is idempotent")
+        selectionVM.clearRecipients()
+        check(selectionVM.config.leadIDs.isEmpty, "Clear recipient selection")
         let tracking = vm.conversations()!
         tracking.selectedLead = vm.config.leadIDs[0]; tracking.note = "Manually recorded interest"
         await tracking.create()
