@@ -4,6 +4,26 @@ import Observation
 @MainActor @Observable
 final class CampaignEditorViewModel {
     var config = CampaignConfig()
+    private var detailReview: CampaignConfig?
+    private var limitReview: CampaignConfig?
+    private var recipientReview: CampaignConfig?
+    var detailsConfirmed: Bool {
+        get { detailReview == config }
+        set { detailReview = newValue ? config : nil }
+    }
+    var limitsConfirmed: Bool {
+        get { limitReview == config }
+        set { limitReview = newValue ? config : nil }
+    }
+    var recipientsConfirmed: Bool {
+        get { recipientReview == config }
+        set { recipientReview = newValue ? config : nil }
+    }
+    var reviewsComplete: Bool { detailsConfirmed && limitsConfirmed && recipientsConfirmed }
+    func finalize() async {
+        guard reviewsComplete else { errorMessage = "Review and confirm the campaign details, limits and recipients first."; return }
+        await prepare()
+    }
     var aiName: String {
         get { config.aiName ?? "" }
         set { config.aiName = newValue }

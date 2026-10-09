@@ -63,7 +63,15 @@ actor CampaignTestHTTP: LeadHTTPTransport {
         check(notes.count == 2 && notes[0].status == .handoff, "Attributable notes")
         let fresh = DemoPartnerRepository(campaignDemo: true)
         let vm = CampaignEditorViewModel(partnerID: partnerID, id: nil, repository: fresh, leads: fresh, isDemo: true)
-        await vm.load(); vm.useSamplePlan(); await vm.prepare()
+        await vm.load(); vm.useSamplePlan()
+        await vm.finalize()
+        check(vm.record == nil, "Finalization requires review")
+        vm.detailsConfirmed = true; vm.limitsConfirmed = true; vm.recipientsConfirmed = true
+        check(vm.reviewsComplete, "All reviews confirmed")
+        vm.config.offer += " updated"
+        check(!vm.reviewsComplete, "Edits invalidate review confirmations")
+        vm.detailsConfirmed = true; vm.limitsConfirmed = true; vm.recipientsConfirmed = true
+        await vm.finalize()
         check(vm.record?.status == .readyToConnect && vm.notice != nil, "Editor prepare flow")
         vm.config.offer = "Unsaved edit"
         await vm.load()

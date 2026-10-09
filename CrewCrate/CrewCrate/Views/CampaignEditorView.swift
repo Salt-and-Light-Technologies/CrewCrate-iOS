@@ -3,10 +3,12 @@ import SwiftUI
 struct CampaignEditorView: View {
     @State private var viewModel: CampaignEditorViewModel
     @State private var pendingControl: String?
+    @State private var requirementExplanation: String?
     init(viewModel: CampaignEditorViewModel) { _viewModel = State(initialValue: viewModel) }
     private var locked: Bool { viewModel.record?.status == .paused || viewModel.record?.status == .archived }
     var body: some View {
         @Bindable var model = viewModel
+        ScrollViewReader { scroll in
         List {
             Section { MessagingBoundaryNotice(isDemo: viewModel.isDemo) }
             if viewModel.isLoading { Section { ProgressView("Loading saved lists and campaign settings…") } }
@@ -32,7 +34,7 @@ struct CampaignEditorView: View {
                 }
                 if viewModel.handoffEmails.isEmpty { Text("Add your sales handoff emails in Account before preparing a campaign.").font(.caption).foregroundStyle(.secondary) }
                 if viewModel.isDemo { Button("Use sample recovery plan") { viewModel.useSamplePlan() } }
-            }.disabled(locked)
+            }.disabled(locked).id("details")
             Section("Planned limits") {
                 TextField("IANA time zone", text: $model.config.timeZone).textInputAutocapitalization(.never).autocorrectionDisabled()
                 DatePicker("Start time", selection: $model.startTime, in: viewModel.sendingTimeRange, displayedComponents: .hourAndMinute).datePickerStyle(.compact).environment(\.timeZone, viewModel.sendingTimeZone)
@@ -48,40 +50,44 @@ struct CampaignEditorView: View {
                 }
                 Stepper("Maximum follow-ups: \(viewModel.config.followUpLimit)", value: $model.config.followUpLimit, in: 0...3)
                 Text("Limits and hours are stored for future sending. No scheduler or follow-ups run yet.").font(.caption).foregroundStyle(.secondary)
-            }.disabled(locked)
+            }.disabled(locked).id("limits")
             Section("Recipients — \(viewModel.config.leadIDs.count) selected") {
                 Picker("Lead list", selection: $model.selectedImportID) {
                     Text("All uploaded lists").tag(nil as UUID?)
                     ForEach(viewModel.importedFiles) { file in Text("\(file.fileName) (\(file.imported))").tag(Optional(file.id)) }
                 }.disabled(viewModel.isLoading).onChange(of: viewModel.selectedImportID) { _, _ in Task { await viewModel.reloadRecipients() } }
                 if viewModel.moreFiles { Button("Load more lead lists") { Task { await viewModel.loadMoreFiles() } } }
-                Text("Imported contacts are shown below. Only eligible contacts with recorded SMS permission and no opt-out can be selected.").font(.caption).foregroundStyle(.secondary)
-                NavigationLink("Manage imported contacts and permission") { LeadWorkspaceView(viewModel: viewModel.contactWorkspace()) }
-                if viewModel.candidates.isEmpty { Text("No eligible leads available.").foregroundStyle(.secondary) }
-                ForEach(viewModel.candidates) { lead in
-                    Button { viewModel.toggle(lead) } label: {
-                        HStack {
-                            Image(systemName: viewModel.config.leadIDs.contains(lead.id) ? "checkmark.circle.fill" : "circle")
-                            VStack(alignment: .leading) {
-                                Text(lead.name.isEmpty ? lead.phone : lead.name)
-                                Text(lead.optedOut ? "Opted out" : "\(lead.status.title) · SMS permission: \(lead.smsPermission)").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }.disabled(!viewModel.config.leadIDs.contains(lead.id) && (lead.status != .eligible || lead.smsPermission != "recorded" || lead.optedOut))
-                }
-                if viewModel.candidatesTruncated { Button("Load more contacts") { Task { await viewModel.loadMoreCandidates() } } }
-                Text("Each campaign can select up to 500 recipients.").font(.caption).foregroundStyle(.secondary)
-            }.disabled(locked)
+                Text("Review your uploaded contacts, record permission and choose recipients in the lead list below.").font(.caption).foregroundStyle(.secondary)
+                NavigationLink("Manage imported contacts and permission") { LeadWorkspaceView(viewModel: viewModel.contactWorkspace(), campaign: viewModel) }
+                Text("\(viewModel.config.leadIDs.count) selected · up to 500 per campaign").font(.caption).foregroundStyle(.secondary)
+            }.disabled(locked).id("recipients")
             Section("Preparation") {
                 if let record = viewModel.record {
                     LabeledContent("Status", value: record.status.title)
                     if record.ownerHold { Label("Owner hold — owner must release", systemImage: "lock.fill").foregroundStyle(.orange) }
                     LabeledContent("Permitted recipients", value: "\(record.recipientCount)")
-                    ForEach(Array(record.blockers.enumerated()), id: \.offset) { Text($0.element).font(.subheadline).foregroundStyle(.orange) }
+                    ForEach(Array(record.blockers.enumerated()), id: \.offset) { item in
+                        Button {
+                            if item.element.localizedCaseInsensitiveContains("recipient") || item.element.localizedCaseInsensitiveContains("eligibility") {
+                                withAnimation { scroll.scrollTo("recipients", anchor: .top) }
+                            } else {
+                                requirementExplanation = explanation(for: item.element)
+                            }
+                        } label: { Label(item.element + " — review", systemImage: "info.circle").foregroundStyle(.orange) }
+                    }
                 }
+                Button("Review campaign details and sales handoff") { withAnimation { scroll.scrollTo("details", anchor: .top) } }
+                Text("Check the offer, AI instructions, qualification rules and sales handoff email.").font(.caption).foregroundStyle(.secondary)
+                Toggle("I confirm the campaign details", isOn: $model.detailsConfirmed)
+                Button("Review contact limits and sending hours") { withAnimation { scroll.scrollTo("limits", anchor: .top) } }
+                Toggle("I confirm the planned limits", isOn: $model.limitsConfirmed)
+                Button("Review recipient eligibility and permission") { withAnimation { scroll.scrollTo("recipients", anchor: .top) } }
+                Text("Eligible means your team reviewed the contact for this offer. SMS permission must be recorded separately, and opted-out contacts cannot be selected.").font(.caption).foregroundStyle(.secondary)
+                Toggle("I confirm the selected recipients", isOn: $model.recipientsConfirmed)
+                Text("Editing the plan clears these confirmations. CrewCrate checks workspace requirements again when you finalize.").font(.caption).foregroundStyle(.secondary)
                 Text(viewModel.hasUnsavedChanges ? "Unsaved changes" : "No unsaved edits").font(.caption).foregroundStyle(.secondary)
                 Button("Save draft") { Task { await viewModel.save() } }.disabled(locked || viewModel.isLoading)
-                Button("Check and prepare campaign") { Task { await viewModel.prepare() } }.disabled(locked || viewModel.isLoading)
+                Button("Finalize campaign") { Task { await viewModel.finalize() } }.disabled(locked || viewModel.isLoading || !viewModel.reviewsComplete)
                 Text("Preparation rechecks the current recipients. Ready to connect does not mean launched or delivered.").font(.caption).foregroundStyle(.secondary)
                 if viewModel.hasUnsavedChanges { Button("Discard edits and refresh", role: .destructive) { Task { await viewModel.load(discardEdits: true) } } }
             }
@@ -117,5 +123,16 @@ struct CampaignEditorView: View {
                 Button(action.capitalized, role: action == "resume" ? nil : .destructive) { Task { await viewModel.control(action) } }
                 Button("Cancel", role: .cancel) {}
             } message: { _ in Text("The reason is saved in plan history. Sending remains disabled. Archived plans cannot be edited.") }
+        .alert("Workspace requirement", isPresented: Binding(get: { requirementExplanation != nil }, set: { if !$0 { requirementExplanation = nil } })) {
+            Button("OK") { requirementExplanation = nil }
+        } message: { Text(requirementExplanation ?? "") }
+        }
+    }
+    private func explanation(for requirement: String) -> String {
+        if requirement.localizedCaseInsensitiveContains("messaging") { return "CrewCrate must verify the messaging setup before this workspace is ready for outreach. An SMS provider is not connected yet. This cannot be approved by checking a campaign box." }
+        if requirement.localizedCaseInsensitiveContains("reporting") { return "CrewCrate must verify the reporting source chosen during partner setup so campaign outcomes can be checked. Contact your CrewCrate administrator to complete this workspace requirement." }
+        if requirement.localizedCaseInsensitiveContains("agreement") { return "Your partnership agreement must be finalized with CrewCrate. The proposed terms entered during setup do not complete that agreement. Contact your CrewCrate administrator." }
+        if requirement.localizedCaseInsensitiveContains("approved") || requirement.localizedCaseInsensitiveContains("hold") { return "CrewCrate must approve your partner workspace or release its hold. Campaign confirmations do not change workspace approval. Contact your CrewCrate administrator." }
+        return requirement + ". Review your campaign details, limits and recipient selection, save your changes, then finalize again."
     }
 }

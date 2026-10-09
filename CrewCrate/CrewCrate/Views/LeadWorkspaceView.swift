@@ -7,7 +7,10 @@ struct LeadWorkspaceView: View {
     @State private var confirmImport = false
     @State private var permissionLead: LeadRecord?
     @State private var permissionEvidence = ""
-    init(viewModel: LeadWorkspaceViewModel) { _viewModel = State(initialValue: viewModel) }
+    private let campaign: CampaignEditorViewModel?
+    init(viewModel: LeadWorkspaceViewModel, campaign: CampaignEditorViewModel? = nil) {
+        _viewModel = State(initialValue: viewModel); self.campaign = campaign
+    }
     var body: some View {
         @Bindable var model = viewModel
         List {
@@ -17,6 +20,7 @@ struct LeadWorkspaceView: View {
             }
             if let notice = viewModel.notice { Section { Text(notice).foregroundStyle(.indigo) } }
             if let workspace = viewModel.workspace {
+                if campaign == nil {
                 Section(workspace.name) {
                     PartnerStatusBadge(status: workspace.status)
                     LabeledContent("Stored leads", value: "\(workspace.totalLeads)")
@@ -71,6 +75,7 @@ struct LeadWorkspaceView: View {
                         }
                     }
                 }
+                }
                 Section("Find leads") {
                     TextField("Name, phone or email", text: $model.search).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Picker("Status", selection: $model.statusFilter) {
@@ -82,6 +87,11 @@ struct LeadWorkspaceView: View {
                 Section("Leads") {
                     if viewModel.leads.isEmpty { Text("No leads match the loaded filters. Import a list or change your filters.").foregroundStyle(.secondary) }
                     ForEach(viewModel.leads) { lead in
+                        if let campaign {
+                            Button { campaign.toggle(lead) } label: {
+                                Label(campaign.config.leadIDs.contains(lead.id) ? "Selected for campaign" : "Select for campaign", systemImage: campaign.config.leadIDs.contains(lead.id) ? "checkmark.circle.fill" : "circle")
+                            }.disabled(!campaign.config.leadIDs.contains(lead.id) && (lead.status != .eligible || lead.smsPermission != "recorded" || lead.optedOut))
+                        }
                         DisclosureGroup {
                             LabeledContent("Phone", value: lead.phone).textSelection(.enabled)
                             LabeledContent("SMS permission", value: lead.smsPermission.capitalized)
@@ -103,6 +113,7 @@ struct LeadWorkspaceView: View {
                     }
                     if viewModel.hasMoreLeads { Button("Load more leads") { Task { await viewModel.loadMore("leads") } } }
                 }
+                if campaign == nil {
                 Section("Import history") {
                     if viewModel.batches.isEmpty { Text("No imports recorded.").foregroundStyle(.secondary) }
                     ForEach(viewModel.batches) { batch in
@@ -124,6 +135,7 @@ struct LeadWorkspaceView: View {
                         }.padding(.vertical, 4)
                     }
                     if viewModel.hasMoreActivity { Button("Load more activity") { Task { await viewModel.loadMore("activity") } } }
+                }
                 }
             }
             if viewModel.isBusy { ProgressView("Updating workspace…") }
