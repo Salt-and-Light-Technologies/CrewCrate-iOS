@@ -3,12 +3,15 @@ import SwiftUI
 struct CampaignDetailsView: View {
     @State private var confirmsDiscard = false
     @State var viewModel: CampaignDetailsViewModel
+    var onSaved: ((CampaignSummary) -> Void)?
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         @Bindable var viewModel = viewModel
         NavigationStack {
             Form {
-                if viewModel.workspaces.isEmpty {
+                if viewModel.isEditing {
+                    Section { Text("Editing this campaign in its existing business workspace.").foregroundStyle(.secondary) }
+                } else if viewModel.workspaces.isEmpty {
                     Section { Text("Your account needs an assigned workspace before you can save a campaign.").foregroundStyle(.secondary) }
                 } else {
                     Section("Workspace") {
@@ -39,7 +42,7 @@ struct CampaignDetailsView: View {
                         .keyboardType(.emailAddress).textInputAutocapitalization(.never).autocorrectionDisabled()
                 }
                 Section {
-                    Text("Save these details as a draft. Recipients and campaign preparation will be added next.").font(.footnote).foregroundStyle(.secondary)
+                    Text(viewModel.isEditing ? "Saving updates this campaign and returns it to draft for preparation to be checked again." : "Save these details as a draft. Recipients and campaign preparation will be added next.").font(.footnote).foregroundStyle(.secondary)
                 }
             }
             .disabled(viewModel.isSaving)
@@ -48,7 +51,14 @@ struct CampaignDetailsView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { if viewModel.hasEdits { confirmsDiscard = true } else { dismiss() } }.disabled(viewModel.isSaving) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save draft") { Task { if await viewModel.save() { dismiss() } } }
+                    Button(viewModel.isEditing ? "Save changes" : "Save draft") {
+                        Task {
+                            if await viewModel.save() {
+                                if let saved = viewModel.savedCampaign { onSaved?(saved) }
+                                dismiss()
+                            }
+                        }
+                    }
                         .disabled(!viewModel.canSave)
                 }
             }
@@ -64,6 +74,9 @@ struct CampaignDetailsView: View {
             .overlay { if viewModel.isSaving { ProgressView() } }
             .alert("Campaign", isPresented: Binding(get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } })) {
                 Button("OK", role: .cancel) { viewModel.notice = nil }
+                if viewModel.isEditing {
+                    Button("Reload and discard edits", role: .destructive) { Task { await viewModel.reloadSaved() } }
+                }
             } message: { Text(viewModel.notice ?? "") }
         }
     }

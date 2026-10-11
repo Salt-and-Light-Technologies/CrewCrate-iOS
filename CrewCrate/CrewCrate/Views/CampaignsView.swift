@@ -24,7 +24,7 @@ struct CampaignsView: View {
             } else {
                 List(viewModel.campaigns) { campaign in
                     NavigationLink {
-                        SavedCampaignDetailsView(campaign: campaign, service: viewModel.service)
+                        SavedCampaignDetailsView(campaign: campaign, service: viewModel.service, onSaved: { viewModel.replace($0) })
                     } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(campaign.config.name).font(.headline)

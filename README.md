@@ -47,3 +47,11 @@ updates business name, website, industry, services/products, service area, time 
 AI boundaries; users with several businesses select one in that screen. The backend binds
 creation to the verified user and stores updates with expected revisions. Deploy the new
 backend endpoints before testing. No additional database migration is needed.
+
+Saved campaigns support Edit → Save changes using the existing backend PUT endpoint.
+The editor preloads campaign name, offer, AI name/instructions, qualification and sales
+email. Saves use expected_revision, update the existing campaign, refresh the details
+and list, and reset campaign preparation to draft. Unexposed template, schedule, limits
+and recipient IDs survive updates. Failed saves retain edits; Reload and discard edits
+fetches the latest saved campaign after a conflict. Paused/archived editing restrictions
+remain enforced by the backend. No backend deployment or migration is needed.

@@ -12,6 +12,9 @@ final class CampaignsViewModel {
     var showsDetails = false
     let service: any CampaignServicing
     init(service: any CampaignServicing) { self.service = service }
+    func replace(_ campaign: CampaignSummary) {
+        if let index = campaigns.firstIndex(where: { $0.id == campaign.id }) { campaigns[index] = campaign }
+    }
     func load() async {
         guard !isLoading else { return }
         isLoading = true; error = nil

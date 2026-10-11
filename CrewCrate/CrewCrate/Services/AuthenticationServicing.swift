@@ -8,6 +8,8 @@ nonisolated protocol AccountServicing: Sendable {
 nonisolated protocol CampaignServicing: TestAIServicing {
     func workspaces() async throws -> [CampaignWorkspace]
     func campaigns(partnerID: UUID) async throws -> [CampaignSummary]
+    func campaign(partnerID: UUID, campaignID: UUID) async throws -> CampaignSummary
+    func updateCampaign(partnerID: UUID, campaignID: UUID, revision: Int, details: CampaignDetails) async throws -> CampaignSummary
     func createCampaign(partnerID: UUID, details: CampaignDetails) async throws -> CampaignSummary
 }
 

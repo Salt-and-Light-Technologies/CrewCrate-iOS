@@ -21,3 +21,9 @@ and refreshes Campaigns after saving. Account reuses this model for business edi
 SupabaseSession sends authenticated requests to /v1/me/business and partner business
 updates; business data is stored in existing partner onboarding records, separate from
 personal Supabase profile metadata. Email confirmation can precede business onboarding.
+
+SavedCampaignViewModel loads saved details and manages editor presentation. The shared
+CampaignDetailsViewModel supports create and update modes with independent original
+snapshots and optimistic revisions. CampaignServicing exposes detail and update requests.
+CampaignDetails retains the full current backend config so editing visible fields cannot
+reset hidden scheduling/recipient settings. Successful updates replace the list record.

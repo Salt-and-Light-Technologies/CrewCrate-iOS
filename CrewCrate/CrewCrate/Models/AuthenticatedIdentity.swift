@@ -21,19 +21,61 @@ nonisolated struct CampaignSummary: Decodable, Identifiable, Sendable {
     let partnerID: UUID
     let status: String
     let config: CampaignDetails
-    enum CodingKeys: String, CodingKey { case id, status, config; case partnerID = "partner_id" }
+    let revision: Int
+    enum CodingKeys: String, CodingKey { case id, status, config, revision; case partnerID = "partner_id" }
 }
 
-nonisolated struct CampaignDetails: Codable, Sendable {
+nonisolated struct CampaignDetails: Codable, Sendable, Equatable {
     var name = ""
     var offer = ""
     var aiName: String? = ""
     var aiBrief: String? = ""
     var qualification = ""
     var handoffEmail = ""
+    var messageTemplate: String = ""
+    var timeZone: String = "America/Chicago"
+    var startMinute: Int? = nil
+    var endMinute: Int? = nil
+    var startHour: Int = 9
+    var endHour: Int = 17
+    var dailyLimit: Int = 25
+    var followUpLimit: Int = 1
+    var leadIDs: [UUID] = []
+    init() {}
     enum CodingKeys: String, CodingKey {
-        case name, offer, qualification
-        case aiName = "ai_name", aiBrief = "ai_brief", handoffEmail = "handoff_email"
+        case name = "name"
+        case offer = "offer"
+        case aiName = "ai_name"
+        case aiBrief = "ai_brief"
+        case qualification = "qualification"
+        case handoffEmail = "handoff_email"
+        case messageTemplate = "message_template"
+        case timeZone = "time_zone"
+        case startMinute = "start_minute"
+        case endMinute = "end_minute"
+        case startHour = "start_hour"
+        case endHour = "end_hour"
+        case dailyLimit = "daily_limit"
+        case followUpLimit = "follow_up_limit"
+        case leadIDs = "lead_ids"
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        name = try values.decodeIfPresent(String.self, forKey: .name) ?? ""
+        offer = try values.decodeIfPresent(String.self, forKey: .offer) ?? ""
+        aiName = try values.decodeIfPresent(String.self, forKey: .aiName)
+        aiBrief = try values.decodeIfPresent(String.self, forKey: .aiBrief)
+        qualification = try values.decodeIfPresent(String.self, forKey: .qualification) ?? ""
+        handoffEmail = try values.decodeIfPresent(String.self, forKey: .handoffEmail) ?? ""
+        messageTemplate = try values.decodeIfPresent(String.self, forKey: .messageTemplate) ?? ""
+        timeZone = try values.decodeIfPresent(String.self, forKey: .timeZone) ?? "America/Chicago"
+        startMinute = try values.decodeIfPresent(Int.self, forKey: .startMinute)
+        endMinute = try values.decodeIfPresent(Int.self, forKey: .endMinute)
+        startHour = try values.decodeIfPresent(Int.self, forKey: .startHour) ?? 9
+        endHour = try values.decodeIfPresent(Int.self, forKey: .endHour) ?? 17
+        dailyLimit = try values.decodeIfPresent(Int.self, forKey: .dailyLimit) ?? 25
+        followUpLimit = try values.decodeIfPresent(Int.self, forKey: .followUpLimit) ?? 1
+        leadIDs = try values.decodeIfPresent([UUID].self, forKey: .leadIDs) ?? []
     }
 }
 

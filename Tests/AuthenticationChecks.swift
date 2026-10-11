@@ -82,7 +82,7 @@ struct AuthenticationChecks {
         } catch AuthError.credentials {}
         let profileJSON = "{\"id\":\"\(id)\",\"email\":\"user@example.com\",\"new_email\":\"new@example.com\",\"user_metadata\":{\"first_name\":\"Jamie\",\"last_name\":\"Lee\"}}"
         let campaignID = UUID()
-        let campaignJSON = "{\"id\":\"\(campaignID)\",\"partner_id\":\"\(id)\",\"status\":\"draft\",\"config\":{\"name\":\"Roofing recovery\",\"offer\":\"Free inspection\",\"qualification\":\"\",\"handoff_email\":\"\"}}"
+        let campaignJSON = "{\"id\":\"\(campaignID)\",\"partner_id\":\"\(id)\",\"status\":\"draft\",\"revision\":0,\"config\":{\"name\":\"Roofing recovery\",\"offer\":\"Free inspection\",\"qualification\":\"\",\"handoff_email\":\"\"}}"
         let accountTransport = AuthenticationTransport([(200, token), (200, profileJSON), (200, profileJSON), (200, "[{\"id\":\"\(id)\",\"name\":\"Workspace\",\"status\":\"draft\"}]"), (200, "[\(campaignJSON)]"), (201, campaignJSON)])
         let account = SupabaseSession(store: MemorySessionStore(), transport: accountTransport)
         try await account.signIn(email: "user@example.com", password: "password")
@@ -161,6 +161,33 @@ struct AuthenticationChecks {
         let firstAttempt = try JSONSerialization.jsonObject(with: retryRequests[2].httpBody!) as! NSDictionary
         let secondAttempt = try JSONSerialization.jsonObject(with: retryRequests[3].httpBody!) as! NSDictionary
         check(firstAttempt == secondAttempt)
+        let editTransport = AuthenticationTransport([(200, token), (200, campaignJSON), (200, campaignJSON), (409, "{\"detail\":\"Record changed; refresh before saving\"}")])
+        let editService = SupabaseSession(store: MemorySessionStore(), transport: editTransport)
+        try await editService.signIn(email: "user@example.com", password: "password")
+        let fetched = try await editService.campaign(partnerID: id, campaignID: campaignID)
+        let editor = CampaignDetailsViewModel(service: editService, campaign: fetched)
+        check(!editor.hasEdits && editor.isEditing)
+        editor.details.offer = "Updated offer"
+        editor.details.messageTemplate = "Existing template"
+        editor.details.dailyLimit = 12
+        editor.details.leadIDs = [id]
+        check(await editor.save())
+        let editRequests = await editTransport.requests
+        check(editRequests[2].httpMethod == "PUT")
+        check(editRequests[2].url?.path == "/v1/partners/\(id)/campaigns/\(campaignID)")
+        let editBody = try JSONSerialization.jsonObject(with: editRequests[2].httpBody!) as! [String: Any]
+        check(editBody["expected_revision"] as? Int == 0)
+        let encodedConfig = editBody["config"] as! [String: Any]
+        check(encodedConfig["message_template"] as? String == "Existing template")
+        check(encodedConfig["daily_limit"] as? Int == 12)
+        check((encodedConfig["lead_ids"] as? [String])?.count == 1)
+        let decodedConfig = try JSONDecoder().decode(CampaignDetails.self, from: JSONSerialization.data(withJSONObject: encodedConfig))
+        check(decodedConfig.leadIDs == [id] && decodedConfig.dailyLimit == 12)
+        let staleEditor = CampaignDetailsViewModel(service: editService, campaign: fetched)
+        staleEditor.details.offer = "Unsaved change"
+        check(!(await staleEditor.save()))
+        check(staleEditor.notice != nil && staleEditor.savedCampaign == nil)
+        check(staleEditor.details.offer == "Unsaved change")
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }

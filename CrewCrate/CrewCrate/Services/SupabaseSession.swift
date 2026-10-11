@@ -139,6 +139,16 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns", body: JSONEncoder().encode(details))
         return try JSONDecoder().decode(CampaignSummary.self, from: data)
     }
+    func campaign(partnerID: UUID, campaignID: UUID) async throws -> CampaignSummary {
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns/\(campaignID)")
+        return try JSONDecoder().decode(CampaignSummary.self, from: data)
+    }
+    func updateCampaign(partnerID: UUID, campaignID: UUID, revision: Int, details: CampaignDetails) async throws -> CampaignSummary {
+        struct Update: Encodable { let expected_revision: Int; let config: CampaignDetails }
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns/\(campaignID)",
+                                            body: JSONEncoder().encode(Update(expected_revision: revision, config: details)), method: "PUT")
+        return try JSONDecoder().decode(CampaignSummary.self, from: data)
+    }
     func startAITest(partnerID: UUID, campaignID: UUID?, config: CampaignDetails?) async throws -> AITestConversation {
         struct Start: Encodable {
             let campaign_id: UUID?
