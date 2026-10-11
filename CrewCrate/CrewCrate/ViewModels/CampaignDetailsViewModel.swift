@@ -87,7 +87,8 @@ final class CampaignDetailsViewModel {
         }
         return ContactMapping(phone: match(["phone", "phone number", "mobile", "mobile phone", "telephone"]),
                               name: match(["name", "full name", "contact name"]), email: match(["email", "email address"]),
-                              sheet: info.selected_sheet ?? "")
+                              sheet: info.selected_sheet ?? "", permission: match(["sms permission", "permission", "sms consent"]),
+                              evidence: match(["permission evidence", "consent evidence"]), optout: match(["opted out", "opt out"]), test: match(["test data", "test only"]))
     }
     func changeSheet(_ sheet: String) async {
         guard !isImporting, let file = contactFile, let workspaceID else { return }
