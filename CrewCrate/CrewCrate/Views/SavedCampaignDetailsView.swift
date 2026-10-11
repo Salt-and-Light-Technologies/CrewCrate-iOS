@@ -12,6 +12,7 @@ struct SavedCampaignDetailsView: View {
         Form {
             Section("Campaign details") {
                 LabeledContent("Name", value: viewModel.campaign.config.name)
+                LabeledContent("Campaign leads", value: String(viewModel.campaign.config.leadIDs.count))
                 Text(viewModel.campaign.config.offer.isEmpty ? "No offer entered" : viewModel.campaign.config.offer)
             }
             Section("AI assistant") {

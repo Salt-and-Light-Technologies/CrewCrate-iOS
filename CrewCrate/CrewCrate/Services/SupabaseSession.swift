@@ -186,14 +186,52 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
                                             body: JSONSerialization.data(withJSONObject: object), method: id == nil ? "POST" : "PUT")
         return try JSONDecoder().decode(BusinessWorkspace.self, from: data)
     }
-    private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil, method: String? = nil) async throws -> Data {
+    func contactColumns(partnerID: UUID, file: ContactFile, sheet: String) async throws -> ImportColumns {
+        let data = try await uploadContacts(path: "v1/partners/\(partnerID)/imports/columns", file: file, fields: sheet.isEmpty ? [:] : ["sheet": sheet])
+        return try JSONDecoder().decode(ImportColumns.self, from: data)
+    }
+    private func mappingFields(_ mapping: ContactMapping) -> [String: String] {
+        var fields = ["phone_column": mapping.phone]
+        if !mapping.name.isEmpty { fields["name_column"] = mapping.name }
+        if !mapping.email.isEmpty { fields["email_column"] = mapping.email }
+        if !mapping.sheet.isEmpty { fields["sheet"] = mapping.sheet }
+        return fields
+    }
+    func previewContacts(partnerID: UUID, file: ContactFile, mapping: ContactMapping) async throws -> ContactPreview {
+        let data = try await uploadContacts(path: "v1/partners/\(partnerID)/imports/preview", file: file, fields: mappingFields(mapping))
+        return try JSONDecoder().decode(ContactPreview.self, from: data)
+    }
+    func saveCampaignWithContacts(partnerID: UUID, campaignID: UUID?, revision: Int?, details: CampaignDetails, file: ContactFile, mapping: ContactMapping, partnerRevision: Int) async throws -> CampaignSummary {
+        var fields = mappingFields(mapping)
+        fields["config"] = String(data: try JSONEncoder().encode(details), encoding: .utf8)
+        fields["expected_partner_revision"] = String(partnerRevision)
+        fields["campaign_id"] = campaignID?.uuidString
+        fields["expected_revision"] = revision.map(String.init)
+        let data = try await uploadContacts(path: "v1/partners/\(partnerID)/campaign-import", file: file, fields: fields)
+        return try JSONDecoder().decode(CampaignSummary.self, from: data)
+    }
+    private func uploadContacts(path: String, file: ContactFile, fields: [String: String]) async throws -> Data {
+        guard file.data.count <= 5_000_000 else { throw AuthenticationFailure(message: "Choose a file smaller than 5 MB.") }
+        let boundary = "CrewCrate-" + UUID().uuidString
+        var body = Data()
+        func append(_ value: String) { body.append(Data(value.utf8)) }
+        for (key, value) in fields.sorted(by: { $0.key < $1.key }) {
+            append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(key)\"\r\n\r\n\(value)\r\n")
+        }
+        let filename = file.name.replacingOccurrences(of: "\"", with: "_").replacingOccurrences(of: "\r", with: "_").replacingOccurrences(of: "\n", with: "_")
+        append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\nContent-Type: application/octet-stream\r\n\r\n")
+        body.append(file.data)
+        append("\r\n--\(boundary)--\r\n")
+        return try await backendRequest(path: path, body: body, contentType: "multipart/form-data; boundary=\(boundary)")
+    }
+    private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil, method: String? = nil, contentType: String = "application/json") async throws -> Data {
         var url = LiveConfiguration.apiURL.appendingPathComponent(path)
         if let offset { url = url.appending(queryItems: [URLQueryItem(name: "limit", value: "100"), URLQueryItem(name: "offset", value: String(offset))]) }
         var request = URLRequest(url: url)
         request.timeoutInterval = path.contains("ai-tests") ? 75 : 30
         request.httpMethod = method ?? (body == nil ? "GET" : "POST")
         request.httpBody = body
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
         let (data, response) = try await transport.send(request)
         guard (200...299).contains(response.statusCode) else {

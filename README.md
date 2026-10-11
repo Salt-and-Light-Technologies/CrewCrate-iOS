@@ -55,3 +55,13 @@ and list, and reset campaign preparation to draft. Unexposed template, schedule,
 and recipient IDs survive updates. Failed saves retain edits; Reload and discard edits
 fetches the latest saved campaign after a conflict. Paused/archived editing restrictions
 remain enforced by the backend. No backend deployment or migration is needed.
+
+Campaign leads: Upload contact file is available in both new and saved-campaign editors.
+Choose a CSV, TSV or .xlsx from Files, select an Excel worksheet if needed, map phone
+(required) and name/email (optional), then Preview leads. Changing mappings invalidates
+the preview; Save is disabled until a new preview succeeds. Saving atomically adds valid
+contacts to the campaign, preserves existing recipients, reuses duplicates and skips
+invalid rows. Up to 500 distinct recipients per campaign, 5 MB per file. Export Google
+Sheets or Numbers to supported formats first. Imports do not establish permission to
+text, and no SMS is sent. Deploy the new backend before device testing. Original files
+are read with security-scoped access and staged only in memory until save/dismiss.

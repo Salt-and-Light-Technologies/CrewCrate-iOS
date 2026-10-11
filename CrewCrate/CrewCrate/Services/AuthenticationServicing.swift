@@ -5,7 +5,7 @@ nonisolated protocol AccountServicing: Sendable {
     func updateProfile(firstName: String, lastName: String, email: String?) async throws -> UserProfile
 }
 
-nonisolated protocol CampaignServicing: TestAIServicing {
+nonisolated protocol CampaignServicing: TestAIServicing, CampaignImportServicing {
     func workspaces() async throws -> [CampaignWorkspace]
     func campaigns(partnerID: UUID) async throws -> [CampaignSummary]
     func campaign(partnerID: UUID, campaignID: UUID) async throws -> CampaignSummary
@@ -40,4 +40,11 @@ nonisolated protocol TestAIServicing: Sendable {
 nonisolated protocol BusinessServicing: Sendable {
     func businesses() async throws -> [BusinessWorkspace]
     func saveBusiness(id: UUID?, revision: Int?, details: BusinessDetails) async throws -> BusinessWorkspace
+}
+
+
+nonisolated protocol CampaignImportServicing: Sendable {
+    func contactColumns(partnerID: UUID, file: ContactFile, sheet: String) async throws -> ImportColumns
+    func previewContacts(partnerID: UUID, file: ContactFile, mapping: ContactMapping) async throws -> ContactPreview
+    func saveCampaignWithContacts(partnerID: UUID, campaignID: UUID?, revision: Int?, details: CampaignDetails, file: ContactFile, mapping: ContactMapping, partnerRevision: Int) async throws -> CampaignSummary
 }

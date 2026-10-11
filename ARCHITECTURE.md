@@ -27,3 +27,11 @@ CampaignDetailsViewModel supports create and update modes with independent origi
 snapshots and optimistic revisions. CampaignServicing exposes detail and update requests.
 CampaignDetails retains the full current backend config so editing visible fields cannot
 reset hidden scheduling/recipient settings. Successful updates replace the list record.
+
+CampaignDetailsView uses the system fileImporter for CSV/TSV/XLSX. ContactFileReader
+loads bounded data off the main actor with balanced security-scoped access. The editor
+view model owns file/mapping/preview state and invalidates previews when selections
+change. CampaignImportServicing methods in SupabaseSession use authenticated multipart
+requests for columns, preview and transactional campaign/import saving. Original server
+recipient IDs remain in CampaignDetails, and additional imported leads are appended by
+the backend. View code only renders state and triggers view-model operations.

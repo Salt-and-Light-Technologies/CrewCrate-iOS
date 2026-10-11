@@ -144,3 +144,29 @@ nonisolated struct BusinessWorkspace: Decodable, Identifiable, Sendable {
     let revision: Int
     let onboarding: BusinessDetails
 }
+
+nonisolated struct ContactFile: Sendable {
+    let name: String
+    let data: Data
+}
+nonisolated struct ImportColumns: Decodable, Sendable {
+    let columns: [String]
+    let sheets: [String]
+    let selected_sheet: String?
+}
+nonisolated struct ContactMapping: Sendable, Equatable {
+    var phone = ""
+    var name = ""
+    var email = ""
+    var sheet = ""
+}
+nonisolated struct ContactPreview: Decodable, Sendable {
+    let partner_revision: Int
+    let total_rows: Int
+    let imported: Int
+    let duplicates: Int
+    let invalid: Int
+    let issues: [Issue]
+    let issues_truncated: Bool
+    nonisolated struct Issue: Decodable, Sendable { let row_number: Int; let kind: String; let detail: String }
+}

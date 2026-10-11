@@ -188,6 +188,33 @@ struct AuthenticationChecks {
         check(!(await staleEditor.save()))
         check(staleEditor.notice != nil && staleEditor.savedCampaign == nil)
         check(staleEditor.details.offer == "Unsaved change")
+        let columnsJSON = "{\"columns\":[\"Phone\",\"Name\"],\"sheets\":[],\"selected_sheet\":null}"
+        let previewJSON = "{\"partner_revision\":4,\"total_rows\":1,\"imported\":1,\"duplicates\":0,\"invalid\":0,\"issues\":[],\"issues_truncated\":false}"
+        let fileTransport = AuthenticationTransport([(200, token), (200, columnsJSON), (200, previewJSON), (200, campaignJSON)])
+        let fileService = SupabaseSession(store: MemorySessionStore(), transport: fileTransport)
+        try await fileService.signIn(email: "user@example.com", password: "password")
+        let fileEditor = CampaignDetailsViewModel(service: fileService, campaign: fetched)
+        let fileURL = URL(fileURLWithPath: "/private/tmp/crewcrate-upload-\(UUID()).csv")
+        try Data("Phone,Name\n15551234567,Jamie\n".utf8).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        await fileEditor.chooseFile(.success(fileURL))
+        check(fileEditor.mapping.phone == "Phone" && fileEditor.mapping.name == "Name")
+        check(!fileEditor.canSave && fileEditor.hasEdits)
+        await fileEditor.previewFile()
+        check(fileEditor.canSave && fileEditor.preview?.imported == 1)
+        check(await fileEditor.save())
+        let uploadRequests = await fileTransport.requests
+        check(uploadRequests[3].url?.path == "/v1/partners/\(id)/campaign-import")
+        check(uploadRequests[3].value(forHTTPHeaderField: "Authorization") == "Bearer access")
+        check(uploadRequests[3].value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data; boundary=") == true)
+        let multipart = String(data: uploadRequests[3].httpBody!, encoding: .utf8)!
+        check(multipart.contains("name=\"expected_partner_revision\"\r\n\r\n4\r\n"))
+        check(multipart.contains("name=\"campaign_id\"\r\n\r\n\(campaignID.uuidString)\r\n"))
+        check(multipart.contains("15551234567,Jamie"))
+        fileEditor.mapping.phone = "Name"
+        check(fileEditor.preview == nil && !fileEditor.canSave)
+        fileEditor.clearImport()
+        check(fileEditor.contactFile == nil)
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }
