@@ -80,6 +80,30 @@ struct AuthenticationChecks {
             try await rejected.signIn(email: "user@example.com", password: "wrong")
             fatalError("Invalid login must fail")
         } catch AuthError.credentials {}
+        let profileJSON = "{\"id\":\"\(id)\",\"email\":\"user@example.com\",\"new_email\":\"new@example.com\",\"user_metadata\":{\"first_name\":\"Jamie\",\"last_name\":\"Lee\"}}"
+        let campaignID = UUID()
+        let campaignJSON = "{\"id\":\"\(campaignID)\",\"partner_id\":\"\(id)\",\"status\":\"draft\",\"config\":{\"name\":\"Roofing recovery\",\"offer\":\"Free inspection\",\"qualification\":\"\",\"handoff_email\":\"\"}}"
+        let accountTransport = AuthenticationTransport([(200, token), (200, profileJSON), (200, profileJSON), (200, "[{\"id\":\"\(id)\",\"name\":\"Workspace\",\"status\":\"draft\"}]"), (200, "[\(campaignJSON)]"), (201, campaignJSON)])
+        let account = SupabaseSession(store: MemorySessionStore(), transport: accountTransport)
+        try await account.signIn(email: "user@example.com", password: "password")
+        let profile = try await account.profile()
+        check(profile.metadata?.firstName == "Jamie")
+        let updated = try await account.updateProfile(firstName: "Jamie", lastName: "Lee", email: "new@example.com")
+        check(updated.newEmail == "new@example.com")
+        let spaces = try await account.workspaces()
+        check(spaces.first?.id == id)
+        let campaigns = try await account.campaigns(partnerID: id)
+        check(campaigns.first?.config.name == "Roofing recovery")
+        var details = CampaignDetails(); details.name = "Roofing recovery"; details.offer = "Free inspection"
+        let saved = try await account.createCampaign(partnerID: id, details: details)
+        check(saved.status == "draft")
+        let accountRequests = await accountTransport.requests
+        let updateBody = try JSONSerialization.jsonObject(with: accountRequests[2].httpBody!) as! [String: Any]
+        check(updateBody["email"] as? String == "new@example.com")
+        check((updateBody["data"] as? [String: String])?["first_name"] == "Jamie")
+        check(accountRequests[2].httpMethod == "PUT")
+        check(accountRequests[5].httpMethod == "POST")
+        check(accountRequests[5].value(forHTTPHeaderField: "Authorization") == "Bearer access")
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }

@@ -12,7 +12,7 @@ nonisolated enum AuthError: LocalizedError {
         }
     }
 }
-actor SupabaseSession: AuthenticationServicing {
+actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServicing {
     private let store: any AuthSessionStore
     private let transport: any LeadHTTPTransport
     private var session: AuthSession?
@@ -117,7 +117,54 @@ actor SupabaseSession: AuthenticationServicing {
         guard identity.userID == session?.userID else { throw AuthError.response }
         return identity
     }
-    private func authRequest(path: String, body: [String: String]?, method: String = "POST", token: String? = nil, redirect: Bool = false) async throws -> Data {
+    func workspaces() async throws -> [CampaignWorkspace] {
+        var values: [CampaignWorkspace] = []
+        while true {
+            let data = try await backendRequest(path: "v1/partners", offset: values.count)
+            let page = try JSONDecoder().decode([CampaignWorkspace].self, from: data)
+            values += page
+            if page.count < 100 { return values }
+        }
+    }
+    func campaigns(partnerID: UUID) async throws -> [CampaignSummary] {
+        var values: [CampaignSummary] = []
+        while true {
+            let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns", offset: values.count)
+            let page = try JSONDecoder().decode([CampaignSummary].self, from: data)
+            values += page
+            if page.count < 100 { return values }
+        }
+    }
+    func createCampaign(partnerID: UUID, details: CampaignDetails) async throws -> CampaignSummary {
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns", body: JSONEncoder().encode(details))
+        return try JSONDecoder().decode(CampaignSummary.self, from: data)
+    }
+    private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil) async throws -> Data {
+        var url = LiveConfiguration.apiURL.appendingPathComponent(path)
+        if let offset { url = url.appending(queryItems: [URLQueryItem(name: "limit", value: "100"), URLQueryItem(name: "offset", value: String(offset))]) }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 30
+        request.httpMethod = body == nil ? "GET" : "POST"
+        request.httpBody = body
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
+        let (data, response) = try await transport.send(request)
+        guard (200...299).contains(response.statusCode) else {
+            struct Failure: Decodable { let detail: String }
+            let message = (try? JSONDecoder().decode(Failure.self, from: data))?.detail
+            throw AuthenticationFailure(message: message ?? "Couldn’t load or save campaigns. Please try again.")
+        }
+        return data
+    }
+    func profile() async throws -> UserProfile {
+        let data = try await authRequest(path: "user", body: nil, method: "GET", token: try await accessToken())
+        return try JSONDecoder().decode(UserProfile.self, from: data)
+    }
+    func updateProfile(firstName: String, lastName: String, email: String?) async throws -> UserProfile {
+        let data = try await authRequest(path: "user", body: email.map { ["email": $0] }, method: "PUT", token: try await accessToken(), redirect: email != nil, metadata: ["first_name": firstName, "last_name": lastName])
+        return try JSONDecoder().decode(UserProfile.self, from: data)
+    }
+    private func authRequest(path: String, body: [String: String]?, method: String = "POST", token: String? = nil, redirect: Bool = false, metadata: [String: String]? = nil) async throws -> Data {
         var url = LiveConfiguration.authURL.appendingPathComponent(path)
         if redirect { url = url.appending(queryItems: [URLQueryItem(name: "redirect_to", value: "crewcrate://auth")]) }
         var request = URLRequest(url: url)
@@ -125,7 +172,10 @@ actor SupabaseSession: AuthenticationServicing {
         request.setValue(LiveConfiguration.publishableKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
-        if let body { request.httpBody = try JSONEncoder().encode(body) }
+        if let metadata {
+            struct Update: Encodable { let email: String?; let data: [String: String] }
+            request.httpBody = try JSONEncoder().encode(Update(email: body?["email"], data: metadata))
+        } else if let body { request.httpBody = try JSONEncoder().encode(body) }
         let (data, response) = try await transport.send(request)
         guard (200...299).contains(response.statusCode) else {
             struct Failure: Decodable { let msg: String?; let message: String? }

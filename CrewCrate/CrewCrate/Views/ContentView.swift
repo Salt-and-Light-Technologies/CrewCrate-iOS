@@ -1,7 +1,13 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var viewModel = AuthenticationViewModel()
+    @State private var service: SupabaseSession
+    @State private var viewModel: AuthenticationViewModel
+    init() {
+        let service = SupabaseSession()
+        _service = State(initialValue: service)
+        _viewModel = State(initialValue: AuthenticationViewModel(service: service))
+    }
 
     var body: some View {
         Group {
@@ -9,24 +15,9 @@ struct ContentView: View {
                 ProgressView("Restoring your session…")
             } else if viewModel.needsPasswordUpdate {
                 NavigationStack { UpdatePasswordView() }
-            } else if viewModel.identity != nil {
-                NavigationStack {
-                    VStack(spacing: 24) {
-                        Image("CrateMark")
-                            .resizable().scaledToFit().frame(width: 96, height: 96)
-                            .padding(20)
-                            .background(AuthenticationStyle.purple, in: RoundedRectangle(cornerRadius: 24))
-                        Text("You’re logged in").font(.title.bold())
-                        Text("Your CrewCrate account is connected. Your workspace experience is coming next.")
-                            .multilineTextAlignment(.center).foregroundStyle(.secondary)
-                        Button("Log out") { Task { await viewModel.signOut() } }
-                            .buttonStyle(AuthenticationButtonStyle())
-                            .disabled(viewModel.isBusy)
-                    }
-                    .padding(28)
-                    .frame(maxWidth: 420)
-                    .navigationTitle("CrewCrate")
-                }
+            } else if let identity = viewModel.identity {
+                SignedInTabView(service: service, userID: identity.userID)
+                    .id(identity.userID)
             } else {
                 NavigationStack { LoginView() }
             }
