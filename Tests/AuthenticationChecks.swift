@@ -263,7 +263,7 @@ struct AuthenticationChecks {
         let pageIDs = (0..<250).map { _ in UUID() }
         let firstPage = String(data: try JSONSerialization.data(withJSONObject: pageIDs.map(leadJSON)), encoding: .utf8)!
         let finalPage = String(data: try JSONSerialization.data(withJSONObject: [leadJSON(UUID())]), encoding: .utf8)!
-        let pageTransport = AuthenticationTransport([(200, token), (200, campaignJSON), (200, firstPage), (200, "[]"), (200, finalPage), (200, campaignJSON), (200, "[]"), (200, "[]")])
+        let pageTransport = AuthenticationTransport([(200, token), (200, campaignJSON), (200, firstPage), (200, "[]"), (200, "[]"), (200, finalPage), (200, campaignJSON), (200, "[]"), (200, "[]")])
         let pageService = SupabaseSession(store: MemorySessionStore(), transport: pageTransport)
         try await pageService.signIn(email: "user@example.com", password: "password")
         let pager = RecipientReviewViewModel(campaign: fetched, service: pageService)
@@ -278,10 +278,10 @@ struct AuthenticationChecks {
         await pager.load()
         check(pager.leads.isEmpty && pager.selected == retainedSelection)
         let pageRequests = await pageTransport.requests
-        let query = URLComponents(url: pageRequests[4].url!, resolvingAgainstBaseURL: false)!.queryItems!
+        let query = URLComponents(url: pageRequests[5].url!, resolvingAgainstBaseURL: false)!.queryItems!
         check(query.contains(URLQueryItem(name: "limit", value: "250")))
         check(query.contains(URLQueryItem(name: "offset", value: "250")))
-        check(URLComponents(url: pageRequests[6].url!, resolvingAgainstBaseURL: false)!.queryItems!.contains(URLQueryItem(name: "eligibility", value: "excluded")))
+        check(URLComponents(url: pageRequests[7].url!, resolvingAgainstBaseURL: false)!.queryItems!.contains(URLQueryItem(name: "eligibility", value: "excluded")))
         let allSelectionIDs = (0..<550).map { _ in UUID() }
         let selectionJSON = String(data: try JSONEncoder().encode(allSelectionIDs), encoding: .utf8)!
         let eligiblePageJSON = String(data: try JSONSerialization.data(withJSONObject: allSelectionIDs.prefix(250).map(leadJSON)), encoding: .utf8)!

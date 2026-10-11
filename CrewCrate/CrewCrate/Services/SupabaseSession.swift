@@ -192,6 +192,12 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
     }
     private func mappingFields(_ mapping: ContactMapping) -> [String: String] {
         var fields = ["phone_column": mapping.phone]
+        let permissions = ["permission": mapping.permission, "evidence": mapping.evidence, "optout": mapping.optout, "test": mapping.test].filter { !$0.value.isEmpty }
+        if !permissions.isEmpty {
+            let data = try? JSONEncoder().encode(permissions)
+            fields["permission_columns"] = data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            fields["permission_attested"] = mapping.permissionAttested ? "true" : "false"
+        }
         if !mapping.name.isEmpty { fields["name_column"] = mapping.name }
         if !mapping.email.isEmpty { fields["email_column"] = mapping.email }
         if !mapping.sheet.isEmpty { fields["sheet"] = mapping.sheet }
@@ -224,14 +230,20 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         append("\r\n--\(boundary)--\r\n")
         return try await backendRequest(path: path, body: body, contentType: "multipart/form-data; boundary=\(boundary)")
     }
-    func campaignLeads(partnerID: UUID) async throws -> [CampaignLead] {
-        var result: [CampaignLead] = []
-        while true {
-            let data = try await backendRequest(path: "v1/partners/\(partnerID)/leads", offset: result.count)
-            let page = try JSONDecoder().decode([CampaignLead].self, from: data)
-            result += page
-            if page.count < 100 { return result }
-        }
+    func campaignLeads(partnerID: UUID, campaignID: UUID?, importID: UUID?, eligibility: String, search: String, offset: Int) async throws -> [CampaignLead] {
+        var query = [URLQueryItem(name: "limit", value: "250"), URLQueryItem(name: "offset", value: String(offset)),
+                     URLQueryItem(name: "eligibility", value: eligibility), URLQueryItem(name: "search", value: search)]
+        if let campaignID { query.append(URLQueryItem(name: "campaign_id", value: campaignID.uuidString)) }
+        if let importID { query.append(URLQueryItem(name: "import_id", value: importID.uuidString)) }
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/leads", query: query)
+        return try JSONDecoder().decode([CampaignLead].self, from: data)
+    }
+    func eligibleLeadIDs(partnerID: UUID, campaignID: UUID?, importID: UUID?, search: String) async throws -> [UUID] {
+        var query = [URLQueryItem(name: "search", value: search)]
+        if let campaignID { query.append(URLQueryItem(name: "campaign_id", value: campaignID.uuidString)) }
+        if let importID { query.append(URLQueryItem(name: "import_id", value: importID.uuidString)) }
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/eligible-recipient-ids", query: query)
+        return try JSONDecoder().decode([UUID].self, from: data)
     }
     func leadBatches(partnerID: UUID) async throws -> [LeadBatch] {
         var result: [LeadBatch] = []
@@ -260,9 +272,10 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         struct Revision: Encodable { let expected_revision: Int }
         _ = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns/\(campaignID)/launch", body: JSONEncoder().encode(Revision(expected_revision: revision)))
     }
-    private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil, method: String? = nil, contentType: String = "application/json") async throws -> Data {
+    private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil, method: String? = nil, contentType: String = "application/json", query: [URLQueryItem] = []) async throws -> Data {
         var url = LiveConfiguration.apiURL.appendingPathComponent(path)
         if let offset { url = url.appending(queryItems: [URLQueryItem(name: "limit", value: "100"), URLQueryItem(name: "offset", value: String(offset))]) }
+        if !query.isEmpty { url = url.appending(queryItems: query) }
         var request = URLRequest(url: url)
         request.timeoutInterval = (path.contains("ai-tests") || path.hasSuffix("/prepare")) ? 75 : 30
         request.httpMethod = method ?? (body == nil ? "GET" : "POST")

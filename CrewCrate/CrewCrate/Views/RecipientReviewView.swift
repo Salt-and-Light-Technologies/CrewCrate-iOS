@@ -38,7 +38,7 @@ struct RecipientReviewView: View {
                                 Text(lead.phone).font(.caption).foregroundStyle(.secondary)
                             }
                         }
-                        Text(lead.eligible_for_sms ? "Eligible for texts" : (lead.opted_out || lead.sms_permission == "revoked" ? "Do not text — opted out" : "Not eligible for texts"))
+                        Text(lead.eligible_for_sms ? (lead.permission_evidence.hasPrefix("[TEST ONLY]") ? "Eligible for practice only" : "Eligible for texts") : (lead.opted_out || lead.sms_permission == "revoked" ? "Do not text — opted out" : "Not eligible for texts"))
                             .font(.caption).foregroundStyle(lead.eligible_for_sms ? Color.green : Color.secondary)
                         Button("Contact status & permission") { viewModel.reviewingLead = lead }.buttonStyle(.borderless)
                     }.padding(.vertical, 4)

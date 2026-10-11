@@ -51,7 +51,8 @@ nonisolated protocol CampaignImportServicing: Sendable {
 
 
 nonisolated protocol OutreachServicing: Sendable {
-    func campaignLeads(partnerID: UUID) async throws -> [CampaignLead]
+    func campaignLeads(partnerID: UUID, campaignID: UUID?, importID: UUID?, eligibility: String, search: String, offset: Int) async throws -> [CampaignLead]
+    func eligibleLeadIDs(partnerID: UUID, campaignID: UUID?, importID: UUID?, search: String) async throws -> [UUID]
     func leadBatches(partnerID: UUID) async throws -> [LeadBatch]
     func reviewLead(partnerID: UUID, leadID: UUID, review: LeadReview) async throws -> CampaignLead
     func selectRecipients(partnerID: UUID, campaignID: UUID, revision: Int, leadIDs: [UUID]) async throws -> RecipientSelectionResult

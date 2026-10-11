@@ -162,6 +162,11 @@ nonisolated struct ContactMapping: Sendable, Equatable {
     var name = ""
     var email = ""
     var sheet = ""
+    var permission = ""
+    var evidence = ""
+    var optout = ""
+    var test = ""
+    var permissionAttested = false
 }
 nonisolated struct ContactPreview: Decodable, Sendable {
     let partner_revision: Int

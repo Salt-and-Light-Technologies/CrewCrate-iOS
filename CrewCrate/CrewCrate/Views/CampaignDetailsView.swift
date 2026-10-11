@@ -61,6 +61,26 @@ struct CampaignDetailsView: View {
                             Text("Skip").tag("")
                             ForEach(info.columns, id: \.self) { Text($0).tag($0) }
                         }
+                        Picker("SMS permission column", selection: $viewModel.mapping.permission) {
+                            Text("Skip").tag("")
+                            ForEach(info.columns, id: \.self) { Text($0).tag($0) }
+                        }
+                        Picker("Permission evidence column", selection: $viewModel.mapping.evidence) {
+                            Text("Skip").tag("")
+                            ForEach(info.columns, id: \.self) { Text($0).tag($0) }
+                        }
+                        Picker("Opt-out column", selection: $viewModel.mapping.optout) {
+                            Text("Skip").tag("")
+                            ForEach(info.columns, id: \.self) { Text($0).tag($0) }
+                        }
+                        Picker("Test data column", selection: $viewModel.mapping.test) {
+                            Text("Skip").tag("")
+                            ForEach(info.columns, id: \.self) { Text($0).tag($0) }
+                        }
+                        if !viewModel.mapping.permission.isEmpty {
+                            Toggle("I verified these permission records for this business’s texts", isOn: $viewModel.mapping.permissionAttested)
+                            Text("Recorded/yes requires evidence. Unknown stays excluded; revoked/no and opt-outs are blocked. Test rows can be selected for practice but cannot receive real SMS.").font(.footnote).foregroundStyle(.secondary)
+                        }
                         Button("Preview leads") { Task { await viewModel.previewFile() } }
                             .disabled(viewModel.mapping.phone.isEmpty || viewModel.isImporting)
                         if let preview = viewModel.preview {
@@ -73,7 +93,7 @@ struct CampaignDetailsView: View {
                         } else { Text("Preview this file before saving.").font(.footnote).foregroundStyle(.secondary) }
                         Button("Remove selected file", role: .destructive) { viewModel.clearImport() }
                     }
-                    Text("CSV, TSV or Excel .xlsx, up to 5 MB. For Google Sheets or Numbers, export to one of these formats. Use headers in row 1 and store phone numbers as text. Up to 10,000 distinct leads per campaign. Importing does not establish permission to text.").font(.footnote).foregroundStyle(.secondary)
+                    Text("CSV, TSV or Excel .xlsx, up to 5 MB. For Google Sheets or Numbers, export to one of these formats. Use headers in row 1 and store phone numbers as text. Up to 10,000 distinct leads per campaign. Importing alone does not establish permission; map and verify permission records.").font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Sending settings") {
                     Text("Your AI assistant creates the opening message from your business information, offer and instructions before campaign outreach begins.").font(.footnote).foregroundStyle(.secondary)

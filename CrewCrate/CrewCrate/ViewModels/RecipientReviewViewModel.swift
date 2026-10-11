@@ -40,7 +40,10 @@ final class RecipientReviewViewModel {
             let contacts = try await fetchPage(offset: 0)
             let imports = try await service.leadBatches(partnerID: campaign.partnerID)
             campaign = current; leads = contacts; batches = imports
-            if !hasLoaded { selected = Set(current.config.leadIDs) }
+            if !hasLoaded {
+                let eligibleIDs = try await service.eligibleLeadIDs(partnerID: current.partnerID, campaignID: current.id, importID: nil, search: "")
+                selected = Set(eligibleIDs).intersection(Set(current.config.leadIDs))
+            }
             for contact in contacts where !contact.eligible_for_sms { selected.remove(contact.id) }
             nextOffset = contacts.count; hasMore = contacts.count == 250
             hasLoaded = true
@@ -120,12 +123,14 @@ final class LeadPermissionViewModel {
     var showsPermissionEditor = false
     var statusTitle: String {
         if lead.opted_out || lead.sms_permission == "revoked" { return "Do not text — opted out" }
+        if lead.eligible_for_sms && lead.permission_evidence.hasPrefix("[TEST ONLY]") { return "Eligible for practice only" }
         if lead.eligible_for_sms { return "Eligible for texts" }
         if lead.status == "excluded" { return "Excluded from texts" }
         return "Not eligible — permission needed"
     }
     var statusExplanation: String {
         if lead.opted_out || lead.sms_permission == "revoked" { return "This contact asked to stop texts and cannot be re-enabled here." }
+        if lead.eligible_for_sms && lead.permission_evidence.hasPrefix("[TEST ONLY]") { return "This is a simulated permission record. You can select it for testing; real SMS is blocked." }
         if lead.eligible_for_sms { return "SMS permission is recorded. This contact can be selected for campaign outreach." }
         if lead.status == "excluded" { return "This contact has been excluded from campaign outreach." }
         return "Record their permission before selecting this contact. Importing a lead does not grant permission."
