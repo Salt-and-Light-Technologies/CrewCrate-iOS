@@ -5,7 +5,7 @@ nonisolated protocol AccountServicing: Sendable {
     func updateProfile(firstName: String, lastName: String, email: String?) async throws -> UserProfile
 }
 
-nonisolated protocol CampaignServicing: Sendable {
+nonisolated protocol CampaignServicing: TestAIServicing {
     func workspaces() async throws -> [CampaignWorkspace]
     func campaigns(partnerID: UUID) async throws -> [CampaignSummary]
     func createCampaign(partnerID: UUID, details: CampaignDetails) async throws -> CampaignSummary
@@ -25,4 +25,11 @@ nonisolated protocol AuthenticationServicing: Sendable {
 nonisolated struct AuthenticationFailure: LocalizedError {
     let message: String
     var errorDescription: String? { message }
+}
+
+
+nonisolated protocol TestAIServicing: Sendable {
+    func startAITest(partnerID: UUID, campaignID: UUID?, config: CampaignDetails?) async throws -> AITestConversation
+    func aiTest(partnerID: UUID, testID: UUID) async throws -> AITestConversation
+    func sendAITest(partnerID: UUID, testID: UUID, revision: Int, requestID: UUID, text: String) async throws -> AITestConversation
 }

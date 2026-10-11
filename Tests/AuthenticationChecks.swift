@@ -104,6 +104,25 @@ struct AuthenticationChecks {
         check(accountRequests[2].httpMethod == "PUT")
         check(accountRequests[5].httpMethod == "POST")
         check(accountRequests[5].value(forHTTPHeaderField: "Authorization") == "Bearer access")
+        let testID = UUID()
+        let messageID = UUID()
+        let decisionID = UUID()
+        let testJSON = "{\"id\":\"\(testID)\",\"revision\":0,\"status\":\"active\",\"ai_name\":\"Emma\",\"messages\":[{\"id\":\"\(messageID)\",\"role\":\"assistant\",\"text\":\"Hello\",\"timestamp\":\"2026-10-11T00:00:00Z\"}],\"decisions\":[{\"id\":\"\(decisionID)\",\"decision\":\"continue\",\"reason\":\"Opening\",\"handoff_summary\":\"\"}]}"
+        let aiTransport = AuthenticationTransport([(200, token), (201, testJSON), (200, testJSON), (200, testJSON)])
+        let aiService = SupabaseSession(store: MemorySessionStore(), transport: aiTransport)
+        try await aiService.signIn(email: "user@example.com", password: "password")
+        let practice = try await aiService.startAITest(partnerID: id, campaignID: nil, config: details)
+        check(practice.isActive && practice.aiName == "Emma" && practice.messages.count == 1)
+        let turnID = UUID()
+        _ = try await aiService.sendAITest(partnerID: id, testID: practice.id, revision: 0, requestID: turnID, text: "Is it free?")
+        _ = try await aiService.aiTest(partnerID: id, testID: practice.id)
+        let aiRequests = await aiTransport.requests
+        let startBody = try JSONSerialization.jsonObject(with: aiRequests[1].httpBody!) as! [String: Any]
+        check(startBody["config"] != nil && startBody["campaign_id"] == nil)
+        let turnBody = try JSONSerialization.jsonObject(with: aiRequests[2].httpBody!) as! [String: Any]
+        check(turnBody["expected_revision"] as? Int == 0)
+        check(turnBody["request_id"] as? String == turnID.uuidString)
+        check(aiRequests[3].httpMethod == "GET")
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }

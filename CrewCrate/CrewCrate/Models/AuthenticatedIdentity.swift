@@ -50,3 +50,38 @@ nonisolated struct UserProfile: Decodable, Sendable {
     }
     enum CodingKeys: String, CodingKey { case id, email; case newEmail = "new_email", metadata = "user_metadata" }
 }
+
+
+nonisolated struct AITestConversation: Decodable, Identifiable, Sendable {
+    let id: UUID
+    let revision: Int
+    let status: String
+    let aiName: String
+    let messages: [AITestMessage]
+    let decisions: [AITestDecision]
+    var isActive: Bool { status == "active" }
+    enum CodingKeys: String, CodingKey { case id, revision, status, messages, decisions; case aiName = "ai_name" }
+}
+
+nonisolated struct AITestMessage: Decodable, Identifiable, Sendable {
+    let id: UUID
+    let role: String
+    let text: String
+    let timestamp: String
+}
+
+nonisolated struct AITestDecision: Decodable, Identifiable, Sendable {
+    let id: UUID
+    let decision: String
+    let reason: String
+    let handoffSummary: String
+    var label: String {
+        switch decision {
+        case "handoff": "Simulated sales handoff"
+        case "opt_out": "Simulated opt-out · outreach stopped"
+        case "end_outreach": "Simulated campaign outreach ended"
+        default: "Continue conversation"
+        }
+    }
+    enum CodingKeys: String, CodingKey { case id, decision, reason; case handoffSummary = "handoff_summary" }
+}

@@ -5,10 +5,11 @@ import Observation
 @Observable
 final class CampaignDetailsViewModel {
     var details = CampaignDetails()
+    var showsAITest = false
     var workspaceID: UUID?
     var isSaving = false
     var notice: String?
-    private let service: any CampaignServicing
+    let service: any CampaignServicing
     let workspaces: [CampaignWorkspace]
     init(service: any CampaignServicing, workspaces: [CampaignWorkspace]) {
         self.service = service; self.workspaces = workspaces

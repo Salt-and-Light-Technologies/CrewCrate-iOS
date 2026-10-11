@@ -23,12 +23,16 @@ struct CampaignsView: View {
                 }
             } else {
                 List(viewModel.campaigns) { campaign in
+                    NavigationLink {
+                        SavedCampaignDetailsView(campaign: campaign, service: viewModel.service)
+                    } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(campaign.config.name).font(.headline)
                         Text(campaign.status.replacingOccurrences(of: "_", with: " ").capitalized)
                             .font(.subheadline).foregroundStyle(.secondary)
                         if !campaign.config.offer.isEmpty { Text(campaign.config.offer).font(.subheadline) }
                     }.padding(.vertical, 6)
+                    }
                 }
                 .refreshable { await viewModel.load() }
             }

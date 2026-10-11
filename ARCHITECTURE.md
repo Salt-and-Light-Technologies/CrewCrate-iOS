@@ -7,3 +7,10 @@ AuthenticationViewModel uses Observation and owns form state, validation and act
 All previous feature source is retained outside the Xcode filesystem-synchronized source group in LegacyReference/BeforeFreshStart-20261011. The existing Views/LaunchScreen.storyboard and asset catalog remain unchanged.
 
 Networking and persistence stay in injected services; views contain presentation and async action dispatch only. The user builds and tests the iOS app manually.
+
+
+AITestView presents a persisted practice transcript using AITestViewModel and injected
+TestAIServicing. SavedCampaignDetailsView passes the saved campaign ID; the draft
+editor passes its validated current config. SupabaseSession handles all HTTP/JWT and
+DTO work. AITestViewModel retains pending request UUID/text/revision for safe turn
+retries. Backend state controls whether the composer is available.

@@ -139,11 +139,32 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns", body: JSONEncoder().encode(details))
         return try JSONDecoder().decode(CampaignSummary.self, from: data)
     }
+    func startAITest(partnerID: UUID, campaignID: UUID?, config: CampaignDetails?) async throws -> AITestConversation {
+        struct Start: Encodable {
+            let campaign_id: UUID?
+            let config: CampaignDetails?
+        }
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/ai-tests", body: JSONEncoder().encode(Start(campaign_id: campaignID, config: config)))
+        return try JSONDecoder().decode(AITestConversation.self, from: data)
+    }
+    func aiTest(partnerID: UUID, testID: UUID) async throws -> AITestConversation {
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/ai-tests/\(testID)")
+        return try JSONDecoder().decode(AITestConversation.self, from: data)
+    }
+    func sendAITest(partnerID: UUID, testID: UUID, revision: Int, requestID: UUID, text: String) async throws -> AITestConversation {
+        struct Turn: Encodable {
+            let expected_revision: Int
+            let request_id: UUID
+            let text: String
+        }
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/ai-tests/\(testID)/messages", body: JSONEncoder().encode(Turn(expected_revision: revision, request_id: requestID, text: text)))
+        return try JSONDecoder().decode(AITestConversation.self, from: data)
+    }
     private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil) async throws -> Data {
         var url = LiveConfiguration.apiURL.appendingPathComponent(path)
         if let offset { url = url.appending(queryItems: [URLQueryItem(name: "limit", value: "100"), URLQueryItem(name: "offset", value: String(offset))]) }
         var request = URLRequest(url: url)
-        request.timeoutInterval = 30
+        request.timeoutInterval = path.contains("ai-tests") ? 75 : 30
         request.httpMethod = body == nil ? "GET" : "POST"
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

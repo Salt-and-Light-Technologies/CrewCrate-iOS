@@ -23,3 +23,18 @@ Campaigns and Account each have their own navigation stack. Campaign loading pag
 Account loads and saves first_name/last_name in Supabase user metadata. Email changes use Supabase user updates, showing pending confirmation rather than pretending the address changed immediately. Pull to refresh account after confirmation. Profile photos are resized and stored under Application Support/ProfilePhotos by authenticated user UUID with file protection; they persist on this device but do not sync to other devices. Logout clears the Keychain session through the shared authentication service.
 
 Standalone checks additionally verify account metadata/email request payloads and campaign workspace/list/draft API calls with mocks. No live profile edits, campaigns or iOS build were performed for validation.
+
+## Test AI
+
+Saved campaigns now open a details screen with Test AI. The new campaign form also
+supports testing its current unsaved settings when a workspace and campaign name are
+selected. The practice screen generates the opening outreach, accepts fictional lead
+replies, displays simulated decisions/handoff summaries, and supports New test.
+Opt-out, decline and handoff states stop the session. No SMS, real handoff notification
+or real contact permission update occurs.
+
+AITestViewModel owns async workflow and retry IDs; SupabaseSession implements
+TestAIServicing using JWT-authenticated CrewCrate endpoints. Test DTOs remain in the
+existing Models/AuthenticatedIdentity.swift source file, alongside other API DTOs.
+Backend deployment and the new ai_test_sessions migration are required before use;
+see ../CrewCrate-Backend/TEST_AI.md for exact rollout and manual device checks.

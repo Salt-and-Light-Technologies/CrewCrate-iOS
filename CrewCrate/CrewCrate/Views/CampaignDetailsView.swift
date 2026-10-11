@@ -24,6 +24,11 @@ struct CampaignDetailsView: View {
                     TextField("Campaign name", text: $viewModel.details.name)
                     TextField("Promotion or offer", text: $viewModel.details.offer, axis: .vertical).lineLimit(3...6)
                 }
+                Section("Test your assistant") {
+                    Button("Test AI", systemImage: "bubble.left.and.bubble.right") { viewModel.showsAITest = true }
+                        .disabled(viewModel.workspaceID == nil || viewModel.details.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Text("Try the current details without saving a campaign or contacting real leads.").font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("AI assistant") {
                     TextField("AI name", text: Binding(get: { viewModel.details.aiName ?? "" }, set: { viewModel.details.aiName = $0 }))
                     TextField("Instructions and goals", text: Binding(get: { viewModel.details.aiBrief ?? "" }, set: { viewModel.details.aiBrief = $0 }), axis: .vertical).lineLimit(4...8)
@@ -45,6 +50,11 @@ struct CampaignDetailsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save draft") { Task { if await viewModel.save() { dismiss() } } }
                         .disabled(!viewModel.canSave)
+                }
+            }
+            .sheet(isPresented: $viewModel.showsAITest) {
+                if let partnerID = viewModel.workspaceID {
+                    AITestView(viewModel: AITestViewModel(service: viewModel.service, partnerID: partnerID, config: viewModel.details))
                 }
             }
             .confirmationDialog("Discard campaign details?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
