@@ -243,6 +243,20 @@ struct AuthenticationChecks {
         settingsModel.dailyLimitText = "50"
         settingsModel.endTime = settingsModel.startTime
         check(!settingsModel.canSave)
+        settingsModel.endTime = 17 * 60
+        settingsModel.dailyLimitText = "100"
+        check(settingsModel.canSave && settingsModel.saveBlocker == nil)
+        settingsModel.details.name = ""
+        check(!(await settingsModel.save()))
+        check(settingsModel.notice == "Enter a campaign name before saving.")
+        settingsModel.details.name = "Updated campaign"
+        settingsModel.contactFile = ContactFile(name: "leads.csv", data: Data("Phone\n12025550101".utf8))
+        settingsModel.mapping.phone = "Phone"
+        check(settingsModel.saveBlocker?.contains("Preview") == true)
+        check(!(await settingsModel.save()))
+        check(settingsModel.notice?.contains("Preview") == true)
+        settingsModel.clearImport()
+        check(settingsModel.canSave)
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }

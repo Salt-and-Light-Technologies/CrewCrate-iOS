@@ -24,6 +24,9 @@ struct CampaignDetailsView: View {
                         }
                     }
                 }
+                if let blocker = viewModel.saveBlocker {
+                    Section { Label(blocker, systemImage: "exclamationmark.circle").font(.footnote).foregroundStyle(.secondary) }
+                }
                 Section("Campaign details") {
                     TextField("Campaign name", text: $viewModel.details.name)
                     TextField("Promotion or offer", text: $viewModel.details.offer, axis: .vertical).lineLimit(3...6)
@@ -131,7 +134,7 @@ struct CampaignDetailsView: View {
                             }
                         }
                     }
-                        .disabled(!viewModel.canSave)
+                        .disabled(viewModel.isSaving || viewModel.isImporting)
                 }
             }
             .fileImporter(isPresented: $viewModel.showsFilePicker, allowedContentTypes: [.commaSeparatedText, .tabSeparatedText, UTType(filenameExtension: "xlsx") ?? .data]) { result in

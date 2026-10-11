@@ -58,7 +58,15 @@ final class CampaignDetailsViewModel {
         return nil
     }
     var hasEdits: Bool { details != original || contactFile != nil }
-    var canSave: Bool { settingsError == nil && !isSaving && !isImporting && (contactFile == nil || preview != nil) && workspaceID != nil && !details.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var saveBlocker: String? {
+        if workspaceID == nil { return "Choose a business workspace before saving." }
+        if details.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Enter a campaign name before saving." }
+        if let settingsError { return settingsError }
+        if contactFile != nil && mapping.phone.isEmpty { return "Choose the phone column for the uploaded file before saving." }
+        if contactFile != nil && preview == nil { return "Preview the uploaded leads before saving, or remove the selected file to save only campaign changes." }
+        return nil
+    }
+    var canSave: Bool { !isSaving && !isImporting && saveBlocker == nil }
     func clearImport() {
         contactFile = nil; columns = nil; preview = nil; mapping = ContactMapping()
     }
@@ -111,7 +119,9 @@ final class CampaignDetailsViewModel {
         } catch { notice = error.localizedDescription }
     }
     func save() async -> Bool {
-        guard canSave, let workspaceID else { return false }
+        guard !isSaving && !isImporting else { return false }
+        if let blocker = saveBlocker { notice = blocker; return false }
+        guard let workspaceID else { return false }
         isSaving = true; defer { isSaving = false }
         do {
             details.name = details.name.trimmingCharacters(in: .whitespacesAndNewlines)
