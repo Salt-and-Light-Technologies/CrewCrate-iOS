@@ -23,7 +23,7 @@ final class SavedCampaignViewModel {
         catch { self.error = error.localizedDescription }
     }
     var canPrepare: Bool { canEdit && campaign.ownerHold != true && !campaign.config.leadIDs.isEmpty }
-    var canStart: Bool { canPrepare && campaign.status == "ready_to_connect" && (campaign.blockers ?? []).isEmpty && !campaign.config.messageTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canStart: Bool { canPrepare && campaign.status == "ready_to_connect" && (campaign.blockers ?? []).isEmpty }
     func prepare() async -> CampaignSummary? {
         guard canPrepare else { return nil }
         isLoading = true; error = nil; notice = nil

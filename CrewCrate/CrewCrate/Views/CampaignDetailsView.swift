@@ -70,14 +70,33 @@ struct CampaignDetailsView: View {
                     }
                     Text("CSV, TSV or Excel .xlsx, up to 5 MB. For Google Sheets or Numbers, export to one of these formats. Use headers in row 1 and store phone numbers as text. Up to 500 distinct leads per campaign. Importing does not establish permission to text.").font(.footnote).foregroundStyle(.secondary)
                 }
-                Section("Opening SMS and sending settings") {
-                    TextField("Opening message (include your business name and Reply STOP to opt out)", text: $viewModel.details.messageTemplate, axis: .vertical).lineLimit(3...8)
-                    Text("\(viewModel.details.messageTemplate.count)/480 characters").font(.caption).foregroundStyle(.secondary)
-                    TextField("Campaign time zone (e.g. America/Chicago)", text: $viewModel.details.timeZone)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Stepper("Start hour: \(viewModel.details.startHour):\(String(format: "%02d", viewModel.details.startMinute ?? 0))", value: $viewModel.details.startHour, in: 9...17)
-                    Stepper("End hour: \(viewModel.details.endHour):\(String(format: "%02d", viewModel.details.endMinute ?? 0))", value: $viewModel.details.endHour, in: 9...17)
-                    Stepper("Daily message limit: \(viewModel.details.dailyLimit)", value: $viewModel.details.dailyLimit, in: 1...500)
+                Section("Sending settings") {
+                    Text("Your AI assistant creates the opening message from your business information, offer and instructions when you check campaign readiness.").font(.footnote).foregroundStyle(.secondary)
+                    Picker("Time zone", selection: $viewModel.details.timeZone) {
+                        ForEach(viewModel.timeZones, id: \.self) { zone in
+                            Text(zone.replacingOccurrences(of: "_", with: " ")).tag(zone)
+                        }
+                    }.pickerStyle(.navigationLink)
+                    Picker("Start time", selection: $viewModel.startTime) {
+                        ForEach(viewModel.sendingTimes, id: \.self) { time in
+                            Text(viewModel.timeLabel(time)).tag(time)
+                        }
+                    }.pickerStyle(.menu)
+                    Picker("End time", selection: $viewModel.endTime) {
+                        ForEach(viewModel.sendingTimes, id: \.self) { time in
+                            Text(viewModel.timeLabel(time)).tag(time)
+                        }
+                    }.pickerStyle(.menu)
+                    HStack {
+                        Text("Daily message limit")
+                        Spacer()
+                        TextField("Limit", text: $viewModel.dailyLimitText)
+                            .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .frame(width: 90).accessibilityLabel("Daily message limit")
+                    }
+                    if let settingsError = viewModel.settingsError {
+                        Text(settingsError).font(.footnote).foregroundStyle(.red)
+                    }
                     Text("After saving, review each lead’s permission and select eligible recipients in campaign details. These settings take effect after the SMS provider is connected.").font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Test your assistant") {

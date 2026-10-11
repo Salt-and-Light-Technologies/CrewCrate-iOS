@@ -232,6 +232,17 @@ struct AuthenticationChecks {
         check(!permissionModel.canSave)
         permissionModel.attested = true
         check(permissionModel.canSave)
+        let settingsModel = CampaignDetailsViewModel(service: editService, campaign: fetched)
+        settingsModel.startTime = 9 * 60 + 30; settingsModel.endTime = 16 * 60 + 45
+        check(settingsModel.details.startHour == 9 && settingsModel.details.startMinute == 30)
+        check(settingsModel.timeLabel(settingsModel.endTime) == "4:45 PM")
+        settingsModel.dailyLimitText = "123"
+        check(settingsModel.details.dailyLimit == 123 && settingsModel.settingsError == nil)
+        settingsModel.dailyLimitText = ""
+        check(!settingsModel.canSave)
+        settingsModel.dailyLimitText = "50"
+        settingsModel.endTime = settingsModel.startTime
+        check(!settingsModel.canSave)
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }

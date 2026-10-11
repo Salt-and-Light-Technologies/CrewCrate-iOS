@@ -264,7 +264,7 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         var url = LiveConfiguration.apiURL.appendingPathComponent(path)
         if let offset { url = url.appending(queryItems: [URLQueryItem(name: "limit", value: "100"), URLQueryItem(name: "offset", value: String(offset))]) }
         var request = URLRequest(url: url)
-        request.timeoutInterval = path.contains("ai-tests") ? 75 : 30
+        request.timeoutInterval = (path.contains("ai-tests") || path.hasSuffix("/prepare")) ? 75 : 30
         request.httpMethod = method ?? (body == nil ? "GET" : "POST")
         request.httpBody = body
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")

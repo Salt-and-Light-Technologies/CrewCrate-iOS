@@ -26,7 +26,7 @@ struct SavedCampaignDetailsView: View {
                 LabeledContent("Status", value: viewModel.campaign.status.replacingOccurrences(of: "_", with: " ").capitalized)
                 LabeledContent("Recipients passing checks", value: String(viewModel.campaign.recipientCount ?? 0))
                 if viewModel.campaign.config.messageTemplate.isEmpty {
-                    Text("Edit the campaign to add your opening SMS message.").foregroundStyle(.secondary)
+                    Text("Your AI assistant will create the opening message when you check campaign readiness.").foregroundStyle(.secondary)
                 } else { Text(viewModel.campaign.config.messageTemplate) }
                 ForEach(Array((viewModel.campaign.blockers ?? []).enumerated()), id: \.offset) { _, blocker in
                     Text(blocker).font(.footnote).foregroundStyle(.secondary)

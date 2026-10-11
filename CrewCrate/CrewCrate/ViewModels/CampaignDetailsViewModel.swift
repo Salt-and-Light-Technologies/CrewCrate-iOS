@@ -32,8 +32,33 @@ final class CampaignDetailsViewModel {
         existing = campaign; original = campaign.config
         details = campaign.config; workspaceID = campaign.partnerID
     }
+    var timeZones: [String] { Array(Set(TimeZone.knownTimeZoneIdentifiers + [details.timeZone])).sorted() }
+    var sendingTimes: [Int] {
+        Array(Set(Array(stride(from: 9 * 60, through: 17 * 60, by: 15)) + [startTime, endTime])).sorted()
+    }
+    var startTime: Int {
+        get { details.startHour * 60 + (details.startMinute ?? 0) }
+        set { details.startHour = newValue / 60; details.startMinute = newValue % 60 }
+    }
+    var endTime: Int {
+        get { details.endHour * 60 + (details.endMinute ?? 0) }
+        set { details.endHour = newValue / 60; details.endMinute = newValue % 60 }
+    }
+    func timeLabel(_ minutes: Int) -> String {
+        let hour = minutes / 60
+        return String(format: "%d:%02d %@", hour % 12 == 0 ? 12 : hour % 12, minutes % 60, hour < 12 ? "AM" : "PM")
+    }
+    var dailyLimitText: String {
+        get { details.dailyLimit == 0 ? "" : String(details.dailyLimit) }
+        set { details.dailyLimit = Int(newValue.trimmingCharacters(in: .whitespaces)) ?? 0 }
+    }
+    var settingsError: String? {
+        if details.dailyLimit < 1 { return "Enter a daily message limit of at least 1." }
+        if startTime < 540 || endTime > 1020 || startTime >= endTime { return "Choose a sending window between 9:00 AM and 5:00 PM, with the end after the start." }
+        return nil
+    }
     var hasEdits: Bool { details != original || contactFile != nil }
-    var canSave: Bool { !isSaving && !isImporting && (contactFile == nil || preview != nil) && workspaceID != nil && !details.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canSave: Bool { settingsError == nil && !isSaving && !isImporting && (contactFile == nil || preview != nil) && workspaceID != nil && !details.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     func clearImport() {
         contactFile = nil; columns = nil; preview = nil; mapping = ContactMapping()
     }
