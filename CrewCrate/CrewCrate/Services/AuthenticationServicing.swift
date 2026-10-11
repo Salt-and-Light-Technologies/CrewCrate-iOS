@@ -6,6 +6,7 @@ nonisolated protocol AccountServicing: Sendable {
 }
 
 nonisolated protocol CampaignServicing: TestAIServicing, CampaignImportServicing, OutreachServicing {
+    func deleteCampaign(partnerID: UUID, campaignID: UUID, revision: Int) async throws
     func workspaces() async throws -> [CampaignWorkspace]
     func campaigns(partnerID: UUID) async throws -> [CampaignSummary]
     func campaign(partnerID: UUID, campaignID: UUID) async throws -> CampaignSummary
@@ -14,6 +15,7 @@ nonisolated protocol CampaignServicing: TestAIServicing, CampaignImportServicing
 }
 
 nonisolated protocol AuthenticationServicing: Sendable {
+    func deleteAccount() async throws
     func restore() async throws -> Bool
     func signIn(email: String, password: String) async throws
     func signUp(email: String, password: String) async throws -> Bool

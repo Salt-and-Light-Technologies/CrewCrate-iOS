@@ -42,6 +42,7 @@ struct CampaignsView: View {
                 .refreshable { await viewModel.load() }
             }
         }
+        .onAppear { Task { await viewModel.load() } }
         .navigationTitle("Campaigns")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

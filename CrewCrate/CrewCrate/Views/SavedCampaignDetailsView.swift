@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SavedCampaignDetailsView: View {
     @State private var confirmsRemoveList = false
+    @State private var confirmsDeletion = false
+    @Environment(\.dismiss) private var dismiss
     @State private var viewModel: SavedCampaignViewModel
     var onSaved: ((CampaignSummary) -> Void)?
     init(campaign: CampaignSummary, service: any CampaignServicing, onSaved: ((CampaignSummary) -> Void)? = nil) {
@@ -65,6 +67,7 @@ struct SavedCampaignDetailsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
+                    Button("Delete campaign", role: .destructive) { confirmsDeletion = true }.disabled(viewModel.isLoading)
                     Button("Edit campaign") { viewModel.showsEditor = true }.disabled(!viewModel.canEdit)
                     Button("Remove all contacts", role: .destructive) { confirmsRemoveList = true }
                         .disabled(!viewModel.canEdit || viewModel.campaign.config.leadIDs.isEmpty || viewModel.campaign.ownerHold == true)
@@ -77,6 +80,12 @@ struct SavedCampaignDetailsView: View {
                 Task { if let updated = await viewModel.removeLeadList() { onSaved?(updated) } }
             }
         } message: { Text("This resets campaign preparation. Contact records and permissions are kept.") }
+        .confirmationDialog("Permanently delete this campaign?", isPresented: $confirmsDeletion, titleVisibility: .visible) {
+            Button("Delete campaign", role: .destructive) {
+                Task { if await viewModel.deleteCampaign() { dismiss() } }
+            }
+            Button("Keep campaign", role: .cancel) {}
+        } message: { Text("Campaign details and conversations will be removed. Business contacts and opt-out records are kept. This cannot be undone.") }
         .onAppear { Task { await viewModel.load() } }
         .refreshable { await viewModel.load() }
         .alert("Campaign messages", isPresented: Binding(get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } })) {

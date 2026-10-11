@@ -78,6 +78,15 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         try store.save(value); session = value
         return true
     }
+    func deleteAccount() async throws {
+        _ = try await backendRequest(path: "v1/me", method: "DELETE")
+        generation += 1
+        session = nil
+        try store.clear()
+    }
+    func deleteCampaign(partnerID: UUID, campaignID: UUID, revision: Int) async throws {
+        _ = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns/\(campaignID)", method: "DELETE", query: [URLQueryItem(name: "expected_revision", value: String(revision))])
+    }
     func recover(email: String) async throws {
         _ = try await authRequest(path: "recover", body: ["email": email], redirect: true)
     }

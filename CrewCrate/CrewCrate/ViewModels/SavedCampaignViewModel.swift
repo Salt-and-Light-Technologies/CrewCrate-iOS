@@ -58,5 +58,14 @@ final class SavedCampaignViewModel {
             return campaign
         } catch { self.error = error.localizedDescription; return nil }
     }
+    func deleteCampaign() async -> Bool {
+        guard !isLoading else { return false }
+        isLoading = true; error = nil
+        defer { isLoading = false }
+        do {
+            try await service.deleteCampaign(partnerID: campaign.partnerID, campaignID: campaign.id, revision: campaign.revision)
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
     func didSave(_ updated: CampaignSummary) { campaign = updated; error = nil }
 }

@@ -4,6 +4,7 @@ import PhotosUI
 struct AccountView: View {
     @Environment(AuthenticationViewModel.self) private var authentication
     @State private var confirmsLogout = false
+    @State private var confirmsDeletion = false
     @State var viewModel: AccountViewModel
     let business: BusinessViewModel
     var onBusinessSaved: (() -> Void)?
@@ -59,14 +60,20 @@ struct AccountView: View {
                 }
             }
             Section {
+                Button("Delete account", role: .destructive) { confirmsDeletion = true }.disabled(viewModel.isBusy || authentication.isBusy)
                 Button("Log out", role: .destructive) { confirmsLogout = true }
                     .disabled(viewModel.isBusy || authentication.isBusy)
             }
         }
         .navigationTitle("Account")
         .confirmationDialog("Log out of CrewCrate?", isPresented: $confirmsLogout, titleVisibility: .visible) {
-            Button("Log out", role: .destructive) { Task { await authentication.signOut() } }
+            Button("Delete account", role: .destructive) { confirmsDeletion = true }.disabled(viewModel.isBusy || authentication.isBusy)
+                Button("Log out", role: .destructive) { Task { await authentication.signOut() } }
         }
+        .confirmationDialog("Permanently delete your account?", isPresented: $confirmsDeletion, titleVisibility: .visible) {
+            Button("Delete my account", role: .destructive) { Task { await authentication.deleteAccount() } }
+            Button("Keep account", role: .cancel) {}
+        } message: { Text("Your login and business access will be removed. Shared business campaigns, contacts and permission records are kept. This cannot be undone.") }
         .safeAreaInset(edge: .bottom) {
             Button("Save profile") { Task { await viewModel.save() } }
                 .buttonStyle(CrewPrimaryButtonStyle()).disabled(viewModel.isBusy || !viewModel.hasLoaded)

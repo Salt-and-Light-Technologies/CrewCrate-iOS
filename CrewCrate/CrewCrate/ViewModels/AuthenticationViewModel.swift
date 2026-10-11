@@ -50,6 +50,14 @@ final class AuthenticationViewModel {
         }
     }
 
+    func deleteAccount() async {
+        await perform {
+            try await self.service.deleteAccount()
+            self.identity = nil
+            self.needsPasswordUpdate = false
+            self.password = ""; self.confirmPassword = ""
+        }
+    }
     func signOut() async {
         await perform {
             self.identity = nil
