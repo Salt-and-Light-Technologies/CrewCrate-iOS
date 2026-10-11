@@ -11,30 +11,36 @@ struct SavedCampaignDetailsView: View {
     var body: some View {
         @Bindable var viewModel = viewModel
         Form {
-            Section("Campaign details") {
-                LabeledContent("Name", value: viewModel.campaign.config.name)
-                LabeledContent("Campaign leads", value: String(viewModel.campaign.config.leadIDs.count))
-                Text(viewModel.campaign.config.offer.isEmpty ? "No offer entered" : viewModel.campaign.config.offer)
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(viewModel.campaign.config.name).font(.title2.bold())
+                    Text(viewModel.campaign.config.offer.isEmpty ? "Add an offer to tell people what your business can do for them." : viewModel.campaign.config.offer).foregroundStyle(.secondary)
+                    Label("\(viewModel.campaign.config.leadIDs.count) contacts in this campaign", systemImage: "person.2")
+                        .font(.subheadline)
+                }.padding(.vertical, 8)
             }
-            Section("Campaign leads") {
+            Section("Manage your campaign") {
+                Button { viewModel.showsEditor = true } label: {
+                    CrewTaskLabel(title: "Campaign setup", subtitle: "Change your offer, assistant or sending hours", symbol: "slider.horizontal.3")
+                }.disabled(!viewModel.canEdit)
                 NavigationLink {
                     RecipientReviewView(viewModel: RecipientReviewViewModel(campaign: viewModel.campaign, service: viewModel.service), onSaved: {
                         viewModel.didSave($0); onSaved?($0)
                     })
-                } label: { Label("Edit lead list / Review permissions", systemImage: "person.crop.circle.badge.checkmark") }
-                Button("Remove lead list", role: .destructive) { confirmsRemoveList = true }
-                    .disabled(!viewModel.canEdit || viewModel.campaign.config.leadIDs.isEmpty || viewModel.campaign.ownerHold == true)
-                Text("Edit the selected recipients or remove this list from the campaign. Business contacts and opt-outs are preserved.").font(.footnote).foregroundStyle(.secondary)
+                } label: {
+                    CrewTaskLabel(title: "Choose contacts", subtitle: "Pick who should receive your messages", symbol: "person.2")
+                }
+                Button { viewModel.showsTest = true } label: {
+                    CrewTaskLabel(title: "Try your assistant", subtitle: "Have a practice conversation. No texts are sent.", symbol: "bubble.left.and.bubble.right")
+                }.disabled(viewModel.isLoading)
             }
-            Section("AI assistant") {
-                LabeledContent("AI name", value: viewModel.campaign.config.aiName ?? "CrewCrate Assistant")
-                Text(viewModel.campaign.config.aiBrief ?? "No instructions entered")
-                Button("Test AI", systemImage: "bubble.left.and.bubble.right") { viewModel.showsTest = true }
-                    .disabled(viewModel.isLoading)
-            }
-            Section("Sales handoff") {
-                Text(viewModel.campaign.config.qualification.isEmpty ? "No qualification rules entered" : viewModel.campaign.config.qualification)
-                LabeledContent("Sales email", value: viewModel.campaign.config.handoffEmail)
+            Section {
+                DisclosureGroup("Assistant and team details") {
+                    LabeledContent("Assistant", value: viewModel.campaign.config.aiName?.isEmpty == false ? viewModel.campaign.config.aiName! : "CrewCrate Assistant")
+                    Text(viewModel.campaign.config.aiBrief?.isEmpty == false ? viewModel.campaign.config.aiBrief! : "No instructions added yet.")
+                    Text(viewModel.campaign.config.qualification.isEmpty ? "Add when your team should take over in Campaign setup." : viewModel.campaign.config.qualification)
+                    LabeledContent("Team email", value: viewModel.campaign.config.handoffEmail)
+                }
             }
             if ["paused", "archived"].contains(viewModel.campaign.status) {
                 Section { Text("Paused campaigns must be resumed before editing. Archived campaigns cannot be edited.").foregroundStyle(.secondary) }
@@ -49,6 +55,7 @@ struct SavedCampaignDetailsView: View {
                 Button("Start messages", systemImage: "paperplane.fill") {
                     viewModel.showSMSConnectionNotice()
                 }
+                .buttonStyle(CrewPrimaryButtonStyle())
                 .disabled(viewModel.isLoading)
             } footer: {
                 Text("Connect an SMS provider to start sending messages.")
@@ -57,7 +64,12 @@ struct SavedCampaignDetailsView: View {
         .navigationTitle("Campaign details")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Edit") { viewModel.showsEditor = true }.disabled(!viewModel.canEdit)
+                Menu {
+                    Button("Edit campaign") { viewModel.showsEditor = true }.disabled(!viewModel.canEdit)
+                    Button("Remove all contacts", role: .destructive) { confirmsRemoveList = true }
+                        .disabled(!viewModel.canEdit || viewModel.campaign.config.leadIDs.isEmpty || viewModel.campaign.ownerHold == true)
+                } label: { Image(systemName: "ellipsis.circle") }
+                .accessibilityLabel("Campaign options")
             }
         }
         .confirmationDialog("Remove all leads from this campaign?", isPresented: $confirmsRemoveList, titleVisibility: .visible) {

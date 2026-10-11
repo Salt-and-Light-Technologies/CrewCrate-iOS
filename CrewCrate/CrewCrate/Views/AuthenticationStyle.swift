@@ -61,13 +61,14 @@ struct AuthenticationField<Content: View>: View {
 }
 
 struct AuthenticationButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 17)
-            .background(AuthenticationStyle.purple, in: RoundedRectangle(cornerRadius: 14))
+            .background(isEnabled ? AuthenticationStyle.purple : Color.secondary, in: RoundedRectangle(cornerRadius: 14))
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }

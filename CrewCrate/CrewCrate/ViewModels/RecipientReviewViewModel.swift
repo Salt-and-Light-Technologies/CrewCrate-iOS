@@ -8,6 +8,8 @@ final class RecipientReviewViewModel {
     var leads: [CampaignLead] = []
     var batches: [LeadBatch] = []
     var selected: Set<UUID> = []
+    private var savedSelection: Set<UUID> = []
+    var hasSelectionChanges: Bool { selected != savedSelection }
     var search = ""
     var filter = "all"
     var listID = "campaign"
@@ -43,6 +45,7 @@ final class RecipientReviewViewModel {
             if !hasLoaded {
                 let eligibleIDs = try await service.eligibleLeadIDs(partnerID: current.partnerID, campaignID: current.id, importID: nil, search: "")
                 selected = Set(eligibleIDs).intersection(Set(current.config.leadIDs))
+                savedSelection = selected
             }
             for contact in contacts where !contact.eligible_for_sms { selected.remove(contact.id) }
             nextOffset = contacts.count; hasMore = contacts.count == 250
@@ -107,7 +110,7 @@ final class RecipientReviewViewModel {
         do {
             let result = try await service.selectRecipients(partnerID: campaign.partnerID, campaignID: campaign.id,
                 revision: campaign.revision, leadIDs: selected.sorted { $0.uuidString < $1.uuidString })
-            campaign = result.campaign; selected = Set(campaign.config.leadIDs)
+            campaign = result.campaign; selected = Set(campaign.config.leadIDs); savedSelection = selected
             if result.removed_count > 0 { notice = "Removed \(result.removed_count) contacts that no longer pass permission checks." }
             return campaign
         } catch { notice = error.localizedDescription; return nil }

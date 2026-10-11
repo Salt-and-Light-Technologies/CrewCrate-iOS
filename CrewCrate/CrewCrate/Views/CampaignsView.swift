@@ -15,11 +15,16 @@ struct CampaignsView: View {
                 }
             } else if viewModel.campaigns.isEmpty {
                 ContentUnavailableView {
-                    Label("Your campaigns", systemImage: "megaphone")
+                    Label("Create your first campaign", systemImage: "megaphone")
                 } description: {
                     Text(viewModel.workspaces.isEmpty
-                        ? "Your account is connected. An assigned workspace is needed to save campaigns."
-                        : "Tap the plus button to create your first campaign.")
+                        ? "First, open Account and set up your business."
+                        : "Describe your offer, add contacts, and try your assistant before sending anything.")
+                } actions: {
+                    if !viewModel.workspaces.isEmpty {
+                        Button("Create a campaign") { viewModel.showsDetails = true }
+                            .buttonStyle(CrewPrimaryButtonStyle()).frame(maxWidth: 320)
+                    }
                 }
             } else {
                 List(viewModel.campaigns) { campaign in
@@ -28,9 +33,9 @@ struct CampaignsView: View {
                     } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(campaign.config.name).font(.headline)
-                        Text(campaign.status.replacingOccurrences(of: "_", with: " ").capitalized)
+                        Text(campaign.status == "ready_to_connect" ? "Draft" : campaign.status.capitalized)
                             .font(.subheadline).foregroundStyle(.secondary)
-                        if !campaign.config.offer.isEmpty { Text(campaign.config.offer).font(.subheadline) }
+                        Text("\(campaign.config.leadIDs.count) contacts").font(.subheadline).foregroundStyle(.secondary)
                     }.padding(.vertical, 6)
                     }
                 }
@@ -40,7 +45,7 @@ struct CampaignsView: View {
         .navigationTitle("Campaigns")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { viewModel.showsDetails = true } label: { Image(systemName: "plus") }
+                Button { viewModel.showsDetails = true } label: { Label("New campaign", systemImage: "plus") }
                     .accessibilityLabel("Create campaign")
                     .disabled(viewModel.isLoading || !viewModel.hasLoaded)
             }

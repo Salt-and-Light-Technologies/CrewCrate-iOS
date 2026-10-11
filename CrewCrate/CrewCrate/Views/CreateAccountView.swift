@@ -25,7 +25,7 @@ struct CreateAccountView: View {
                         .submitLabel(.go)
                         .onSubmit { Task { await viewModel.createAccount() } }
                 }
-                Text("After confirming your email and signing in, you’ll enter your business information to create your workspace.").font(.footnote).foregroundStyle(.secondary)
+                Text("Next, check your email to confirm your account. Then tell us about your business.").font(.footnote).foregroundStyle(.secondary)
                 Button("Create account") { Task { await viewModel.createAccount() } }
                     .buttonStyle(AuthenticationButtonStyle())
                 Button("Already have an account? Log in") { dismiss() }

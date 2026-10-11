@@ -8,7 +8,7 @@ struct AITestView: View {
         @Bindable var viewModel = viewModel
         NavigationStack {
             VStack(spacing: 0) {
-                Text("Practice only · You are the lead. No SMS or handoff notifications are sent. Real contacts are unchanged.")
+                Text("Practice conversation. Pretend you’re a customer. No real messages are sent.")
                     .font(.footnote).foregroundStyle(.secondary).padding()
                     .frame(maxWidth: .infinity).background(Color(.secondarySystemBackground))
                 ScrollViewReader { proxy in
@@ -16,7 +16,7 @@ struct AITestView: View {
                         LazyVStack(alignment: .leading, spacing: 16) {
                             ForEach(viewModel.conversation?.messages ?? []) { message in
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text(message.role == "user" ? "You · Test lead" : (viewModel.conversation?.aiName ?? "AI assistant"))
+                                    Text(message.role == "user" ? "You, as a customer" : (viewModel.conversation?.aiName ?? "AI assistant"))
                                         .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                                     Text(message.text).textSelection(.enabled)
                                         .padding(14)
@@ -28,8 +28,10 @@ struct AITestView: View {
                             if let decision = viewModel.conversation?.decisions.last {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(decision.label).font(.headline)
-                                    Text(decision.reason).font(.subheadline)
-                                    if !decision.handoffSummary.isEmpty { Text(decision.handoffSummary).font(.subheadline) }
+                                    DisclosureGroup("Why this happened") {
+                                        Text(decision.reason).font(.subheadline)
+                                        if !decision.handoffSummary.isEmpty { Text(decision.handoffSummary).font(.subheadline) }
+                                    }
                                     if viewModel.conversation?.isActive == false {
                                         Text("This test has ended. Start a new test to try another scenario.").font(.footnote).foregroundStyle(.secondary)
                                     }
@@ -58,7 +60,7 @@ struct AITestView: View {
                 }
                 if viewModel.conversation?.isActive == true {
                     HStack(alignment: .bottom) {
-                        TextField("Reply as a lead…", text: $viewModel.message, axis: .vertical)
+                        TextField("Type a customer’s reply…", text: $viewModel.message, axis: .vertical)
                             .lineLimit(1...5).textFieldStyle(.roundedBorder).focused($isTyping)
                         Button { isTyping = false; Task { await viewModel.send() } } label: {
                             Image(systemName: "arrow.up.circle.fill").font(.title)
@@ -66,12 +68,12 @@ struct AITestView: View {
                     }.padding().disabled(viewModel.isBusy)
                 }
             }
-            .navigationTitle("Test AI")
+            .navigationTitle("Try your assistant")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() }.disabled(viewModel.isBusy) }
                 ToolbarItem(placement: .primaryAction) {
-                    Button("New test") { isTyping = false; Task { await viewModel.start() } }.disabled(viewModel.isBusy)
+                    Button("Start over") { isTyping = false; Task { await viewModel.start() } }.disabled(viewModel.isBusy)
                 }
             }
             .task { if viewModel.conversation == nil { await viewModel.start() } }

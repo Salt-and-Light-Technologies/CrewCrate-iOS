@@ -3,6 +3,7 @@ import PhotosUI
 
 struct AccountView: View {
     @Environment(AuthenticationViewModel.self) private var authentication
+    @State private var confirmsLogout = false
     @State var viewModel: AccountViewModel
     let business: BusinessViewModel
     var onBusinessSaved: (() -> Void)?
@@ -46,8 +47,6 @@ struct AccountView: View {
             }
             .disabled(viewModel.isBusy || !viewModel.hasLoaded)
             Section {
-                Button("Save changes") { Task { await viewModel.save() } }
-                    .disabled(viewModel.isBusy || !viewModel.hasLoaded)
                 if !viewModel.hasLoaded && !viewModel.isLoading {
                     Button("Retry loading account") { Task { await viewModel.load() } }
                 }
@@ -60,11 +59,20 @@ struct AccountView: View {
                 }
             }
             Section {
-                Button("Log out", role: .destructive) { Task { await authentication.signOut() } }
+                Button("Log out", role: .destructive) { confirmsLogout = true }
                     .disabled(viewModel.isBusy || authentication.isBusy)
             }
         }
         .navigationTitle("Account")
+        .confirmationDialog("Log out of CrewCrate?", isPresented: $confirmsLogout, titleVisibility: .visible) {
+            Button("Log out", role: .destructive) { Task { await authentication.signOut() } }
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button("Save profile") { Task { await viewModel.save() } }
+                .buttonStyle(CrewPrimaryButtonStyle()).disabled(viewModel.isBusy || !viewModel.hasLoaded)
+                .padding().background(.regularMaterial)
+        }
+        .scrollDismissesKeyboard(.interactively)
         .refreshable { await viewModel.load() }
         .overlay { if viewModel.isBusy { ProgressView().padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) } }
         .task { if !viewModel.hasLoaded { await viewModel.load() } }

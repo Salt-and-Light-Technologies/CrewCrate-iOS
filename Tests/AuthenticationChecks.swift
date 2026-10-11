@@ -270,7 +270,9 @@ struct AuthenticationChecks {
         pager.listID = "all"
         await pager.load()
         check(pager.leads.count == 250 && pager.hasMore)
+        check(!pager.hasSelectionChanges)
         pager.toggle(pager.leads[0])
+        check(pager.hasSelectionChanges)
         let retainedSelection = pager.selected
         await pager.loadMore()
         check(pager.leads.count == 251 && !pager.hasMore && pager.selected == retainedSelection)
@@ -292,6 +294,7 @@ struct AuthenticationChecks {
         allModel.hasLoaded = true; allModel.listID = "all"; allModel.filter = "all"
         await allModel.selectAllEligible()
         check(allModel.selected == Set(allSelectionIDs) && allModel.leads.count == 250)
+        check(allModel.hasSelectionChanges)
         check(allModel.filter == "eligible" && allModel.visible.allSatisfy { allModel.selected.contains($0.id) })
         let listEditor = SavedCampaignViewModel(campaign: fetched, service: allService)
         check(await listEditor.removeLeadList() != nil)

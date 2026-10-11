@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RecipientReviewView: View {
     @State var viewModel: RecipientReviewViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmsDiscard = false
     var onSaved: (CampaignSummary) -> Void
     var body: some View {
         @Bindable var viewModel = viewModel
@@ -14,23 +16,25 @@ struct RecipientReviewView: View {
                 }
                 Picker("Show", selection: $viewModel.filter) {
                     Text("All").tag("all")
-                    Text("Eligible for texts").tag("eligible")
-                    Text("Not eligible").tag("excluded")
+                    Text("Can receive texts").tag("eligible")
+                    Text("Cannot receive texts").tag("excluded")
                 }
-                Text("\(viewModel.selected.count) selected · \(viewModel.visible.count) shown")
-                Button("Select all eligible leads in this list") { Task { await viewModel.selectAllEligible() } }.disabled(!viewModel.hasLoaded)
-                Button("Select eligible leads shown") { viewModel.selectVisible() }.disabled(!viewModel.hasLoaded)
-                Button("Clear selection") { viewModel.selected.removeAll() }
-                Text("Only reviewed contacts with recorded SMS permission and no opt-out can be selected. CrewCrate checks your records; it does not verify external consent or DNC databases.").font(.footnote).foregroundStyle(.secondary)
+                Text("\(viewModel.selected.count) contacts selected").font(.headline)
+                Text("Choose who should receive messages. Contacts without permission cannot be selected.").font(.subheadline).foregroundStyle(.secondary)
+                Button("Select everyone with permission") { Task { await viewModel.selectAllEligible() } }.disabled(!viewModel.hasLoaded)
+                if !viewModel.selected.isEmpty {
+                    Button("Clear selection") { viewModel.selected.removeAll() }
+                }
+
             }
-            Section("Leads") {
+            Section("Contacts") {
                 ForEach(viewModel.visible) { lead in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Button { viewModel.toggle(lead) } label: {
                                 Image(systemName: viewModel.selected.contains(lead.id) ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(viewModel.selected.contains(lead.id) ? Color.accentColor : Color.secondary)
-                                    .font(.title2)
+                                    .font(.title2).frame(minWidth: 44, minHeight: 44)
                             }.buttonStyle(.borderless).disabled(!lead.eligible_for_sms)
                                 .accessibilityLabel(viewModel.selected.contains(lead.id) ? "Deselect lead" : "Select lead")
                             VStack(alignment: .leading) {
@@ -40,7 +44,7 @@ struct RecipientReviewView: View {
                         }
                         Text(lead.eligible_for_sms ? (lead.permission_evidence.hasPrefix("[TEST ONLY]") ? "Eligible for practice only" : "Eligible for texts") : (lead.opted_out || lead.sms_permission == "revoked" ? "Do not text — opted out" : "Not eligible for texts"))
                             .font(.caption).foregroundStyle(lead.eligible_for_sms ? Color.green : Color.secondary)
-                        Button("Contact status & permission") { viewModel.reviewingLead = lead }.buttonStyle(.borderless)
+                        Button("View contact") { viewModel.reviewingLead = lead }.buttonStyle(.borderless)
                     }.padding(.vertical, 4)
                 }
                 if viewModel.hasLoaded && viewModel.visible.isEmpty { Text("No leads match this list and filter.").foregroundStyle(.secondary) }
@@ -49,18 +53,30 @@ struct RecipientReviewView: View {
                 Section { Button("Load more (250 leads)") { Task { await viewModel.loadMore() } } }
             }
             if let notice = viewModel.notice {
-                Section { Text(notice).foregroundStyle(.red) }
-            }
-            Section {
-                Button("Save eligible recipients") {
-                    Task { if let saved = await viewModel.saveSelection() { onSaved(saved) } }
-                }.disabled(!viewModel.canSave)
-                Button("Reload permission checks") { Task { await viewModel.load() } }
+                Section { Text(notice).foregroundStyle(.secondary) }
             }
         }
         .disabled(viewModel.isBusy)
         .searchable(text: $viewModel.search, prompt: "Name, phone or email")
-        .navigationTitle("Review campaign leads")
+         .navigationTitle("Choose contacts")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") {
+                if viewModel.hasSelectionChanges { confirmsDiscard = true } else { dismiss() }
+            }.disabled(viewModel.isBusy) }
+        }
+        .confirmationDialog("Leave without saving your contact selection?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+            Button("Discard changes", role: .destructive) { dismiss() }
+            Button("Keep choosing", role: .cancel) {}
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button("Save \(viewModel.selected.count) contacts") {
+                Task { if let saved = await viewModel.saveSelection() { onSaved(saved); dismiss() } }
+            }.buttonStyle(CrewPrimaryButtonStyle()).disabled(!viewModel.canSave)
+                .padding().background(.regularMaterial)
+        }
+        .refreshable { await viewModel.load() }
         .overlay { if viewModel.isBusy { ProgressView() } }
         .task { if !viewModel.hasLoaded { await viewModel.load() } }
         .onChange(of: viewModel.filter) { _, _ in Task { await viewModel.load() } }
@@ -88,7 +104,9 @@ struct LeadPermissionView: View {
                 Text(viewModel.lead.name)
                 Text(viewModel.lead.phone)
                 if !viewModel.lead.permission_evidence.isEmpty {
-                    Text(viewModel.lead.permission_evidence).font(.footnote).foregroundStyle(.secondary)
+                    DisclosureGroup("Saved permission record") {
+                        Text(viewModel.lead.permission_evidence).font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
             }
             Section("Texting status") {
@@ -112,12 +130,16 @@ struct LeadPermissionView: View {
             if viewModel.action == "record_permission" {
                 Section("Permission record") {
                     TextField("Source (e.g. signup form / CRM record)", text: $viewModel.source)
-                    TextField("Consent date (YYYY-MM-DD)", text: $viewModel.consentDate)
+                    TextField("Date they agreed (YYYY-MM-DD)", text: $viewModel.consentDate)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    TextField("Recipient country code (US, CA, etc.)", text: $viewModel.country)
-                        .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                    Picker("Contact’s country", selection: $viewModel.country) {
+                        Text("Choose a country").tag("")
+                        ForEach(Locale.isoRegionCodes.sorted { (Locale.current.localizedString(forRegionCode: $0) ?? $0) < (Locale.current.localizedString(forRegionCode: $1) ?? $1) }, id: \.self) { code in
+                            Text(Locale.current.localizedString(forRegionCode: code) ?? code).tag(code)
+                        }
+                    }
                     Toggle("I verified permission for this business to text this contact", isOn: $viewModel.attested)
-                    Text("Being in a CSV or a customer list does not establish marketing SMS permission. Record the actual evidence supporting this contact.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Add the record that shows this person agreed to receive your business’s texts.").font(.footnote).foregroundStyle(.secondary)
                 }
             }
             }
