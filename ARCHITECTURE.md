@@ -1,7 +1,9 @@
 # CrewCrate starter architecture
 
-App/CrewCrateApp.swift defines the SwiftUI application and opens Views/ContentView.swift. ContentView displays the standard Hello, world! starter UI. There is no feature state requiring a view-model or data model yet.
+App/CrewCrateApp.swift opens Views/ContentView.swift, which owns the authentication NavigationStack. LoginView is the first screen, with navigation to CreateAccountView and ForgotPasswordView. AuthenticationStyle.swift provides shared form layout and styling using the existing CrateMark asset.
 
-All previous feature source is retained outside the Xcode filesystem-synchronized source group in LegacyReference/BeforeFreshStart-20261011. The existing Views/LaunchScreen.storyboard and asset catalog remain active and unchanged.
+AuthenticationViewModel uses Observation and owns form state, validation and action feedback. Each screen owns its own form instance. Authentication is not connected yet; valid submissions explicitly report that no information or reset email was sent. No credentials are persisted.
 
-Add future features using strict MVVM, Observation and injected async services when needed. The app currently performs no authentication, network calls or persisted-data access.
+All previous feature source is retained outside the Xcode filesystem-synchronized source group in LegacyReference/BeforeFreshStart-20261011. The existing Views/LaunchScreen.storyboard and asset catalog remain unchanged.
+
+Future authentication integration should use injected async services under Services, keeping networking and persistence out of views. The user builds and tests the iOS app manually.
