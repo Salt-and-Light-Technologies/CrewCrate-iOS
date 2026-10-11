@@ -215,6 +215,23 @@ struct AuthenticationChecks {
         check(fileEditor.preview == nil && !fileEditor.canSave)
         fileEditor.clearImport()
         check(fileEditor.contactFile == nil)
+        let allowedLead = CampaignLead(id: id, import_id: id, name: "Allowed", phone: "12025550101", email: "", status: "eligible", revision: 1, sms_permission: "recorded", permission_evidence: "Signed opt-in record", opted_out: false, eligible_for_sms: true, exclusion_reasons: [])
+        let blockedLead = CampaignLead(id: UUID(), import_id: id, name: "Unknown", phone: "12025550102", email: "", status: "unreviewed", revision: 0, sms_permission: "unknown", permission_evidence: "", opted_out: false, eligible_for_sms: false, exclusion_reasons: ["SMS permission has not been recorded"])
+        let reviewModel = RecipientReviewViewModel(campaign: fetched, service: editService)
+        reviewModel.leads = [allowedLead, blockedLead]; reviewModel.listID = "all"
+        reviewModel.toggle(blockedLead)
+        check(reviewModel.selected.isEmpty)
+        reviewModel.selectVisible()
+        check(reviewModel.selected == [id])
+        reviewModel.filter = "excluded"
+        check(reviewModel.visible.map(\.id) == [blockedLead.id])
+        reviewModel.reviewed(CampaignLead(id: id, import_id: id, name: "Allowed", phone: "12025550101", email: "", status: "excluded", revision: 2, sms_permission: "revoked", permission_evidence: "STOP received", opted_out: true, eligible_for_sms: false, exclusion_reasons: ["Contact opted out"]))
+        check(reviewModel.selected.isEmpty)
+        let permissionModel = LeadPermissionViewModel(lead: blockedLead, partnerID: id, service: editService)
+        permissionModel.evidence = "Actual signed consent record"; permissionModel.source = "Website"; permissionModel.country = "US"; permissionModel.consentDate = "2020-01-01"
+        check(!permissionModel.canSave)
+        permissionModel.attested = true
+        check(permissionModel.canSave)
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }

@@ -224,6 +224,42 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         append("\r\n--\(boundary)--\r\n")
         return try await backendRequest(path: path, body: body, contentType: "multipart/form-data; boundary=\(boundary)")
     }
+    func campaignLeads(partnerID: UUID) async throws -> [CampaignLead] {
+        var result: [CampaignLead] = []
+        while true {
+            let data = try await backendRequest(path: "v1/partners/\(partnerID)/leads", offset: result.count)
+            let page = try JSONDecoder().decode([CampaignLead].self, from: data)
+            result += page
+            if page.count < 100 { return result }
+        }
+    }
+    func leadBatches(partnerID: UUID) async throws -> [LeadBatch] {
+        var result: [LeadBatch] = []
+        while true {
+            let data = try await backendRequest(path: "v1/partners/\(partnerID)/imports", offset: result.count)
+            let page = try JSONDecoder().decode([LeadBatch].self, from: data)
+            result += page
+            if page.count < 100 { return result }
+        }
+    }
+    func reviewLead(partnerID: UUID, leadID: UUID, review: LeadReview) async throws -> CampaignLead {
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/leads/\(leadID)/contact-review", body: JSONEncoder().encode(review))
+        return try JSONDecoder().decode(CampaignLead.self, from: data)
+    }
+    func selectRecipients(partnerID: UUID, campaignID: UUID, revision: Int, leadIDs: [UUID]) async throws -> RecipientSelectionResult {
+        struct Selection: Encodable { let expected_revision: Int; let lead_ids: [UUID] }
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns/\(campaignID)/recipients", body: JSONEncoder().encode(Selection(expected_revision: revision, lead_ids: leadIDs)), method: "PUT")
+        return try JSONDecoder().decode(RecipientSelectionResult.self, from: data)
+    }
+    func prepareCampaign(partnerID: UUID, campaignID: UUID, revision: Int) async throws -> CampaignSummary {
+        struct Revision: Encodable { let expected_revision: Int }
+        let data = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns/\(campaignID)/prepare", body: JSONEncoder().encode(Revision(expected_revision: revision)))
+        return try JSONDecoder().decode(CampaignSummary.self, from: data)
+    }
+    func startCampaign(partnerID: UUID, campaignID: UUID, revision: Int) async throws {
+        struct Revision: Encodable { let expected_revision: Int }
+        _ = try await backendRequest(path: "v1/partners/\(partnerID)/campaigns/\(campaignID)/launch", body: JSONEncoder().encode(Revision(expected_revision: revision)))
+    }
     private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil, method: String? = nil, contentType: String = "application/json") async throws -> Data {
         var url = LiveConfiguration.apiURL.appendingPathComponent(path)
         if let offset { url = url.appending(queryItems: [URLQueryItem(name: "limit", value: "100"), URLQueryItem(name: "offset", value: String(offset))]) }
@@ -235,8 +271,8 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
         let (data, response) = try await transport.send(request)
         guard (200...299).contains(response.statusCode) else {
-            struct Failure: Decodable { let detail: String }
-            let message = (try? JSONDecoder().decode(Failure.self, from: data))?.detail
+            let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["detail"]
+            let message = (detail as? String) ?? ((detail as? [String: Any])?["blockers"] as? [String])?.joined(separator: "\n")
             throw AuthenticationFailure(message: message ?? "Couldn’t load or save campaigns. Please try again.")
         }
         return data

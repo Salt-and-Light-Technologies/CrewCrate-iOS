@@ -22,7 +22,10 @@ nonisolated struct CampaignSummary: Decodable, Identifiable, Sendable {
     let status: String
     let config: CampaignDetails
     let revision: Int
-    enum CodingKeys: String, CodingKey { case id, status, config, revision; case partnerID = "partner_id" }
+    let blockers: [String]?
+    let ownerHold: Bool?
+    let recipientCount: Int?
+    enum CodingKeys: String, CodingKey { case id, status, config, revision, blockers; case ownerHold = "owner_hold", recipientCount = "recipient_count"; case partnerID = "partner_id" }
 }
 
 nonisolated struct CampaignDetails: Codable, Sendable, Equatable {
@@ -169,4 +172,38 @@ nonisolated struct ContactPreview: Decodable, Sendable {
     let issues: [Issue]
     let issues_truncated: Bool
     nonisolated struct Issue: Decodable, Sendable { let row_number: Int; let kind: String; let detail: String }
+}
+
+
+nonisolated struct CampaignLead: Decodable, Identifiable, Sendable {
+    let id: UUID
+    let import_id: UUID
+    let name: String
+    let phone: String
+    let email: String
+    let status: String
+    let revision: Int
+    let sms_permission: String
+    let permission_evidence: String
+    let opted_out: Bool
+    let eligible_for_sms: Bool
+    let exclusion_reasons: [String]
+}
+nonisolated struct LeadBatch: Decodable, Identifiable, Sendable {
+    let id: UUID
+    let file_name: String
+    let total_rows: Int
+}
+nonisolated struct LeadReview: Encodable, Sendable {
+    let expected_revision: Int
+    let action: String
+    let evidence: String
+    let source: String
+    let consent_date: String
+    let country: String
+    let attested: Bool
+}
+nonisolated struct RecipientSelectionResult: Decodable, Sendable {
+    let campaign: CampaignSummary
+    let removed_count: Int
 }
