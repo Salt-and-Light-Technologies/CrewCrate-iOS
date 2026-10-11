@@ -14,6 +14,8 @@ final class RecipientReviewViewModel {
     var reviewingLead: CampaignLead?
     var isBusy = false
     var hasLoaded = false
+    var hasMore = false
+    private var nextOffset = 0
     var notice: String?
     let service: any CampaignServicing
     init(campaign: CampaignSummary, service: any CampaignServicing) {
@@ -31,29 +33,65 @@ final class RecipientReviewViewModel {
     func load() async {
         guard !isBusy else { return }
         isBusy = true; notice = nil
+        leads = []; hasMore = false; nextOffset = 0
         defer { isBusy = false }
         do {
             let current = try await service.campaign(partnerID: campaign.partnerID, campaignID: campaign.id)
-            let contacts = try await service.campaignLeads(partnerID: campaign.partnerID)
+            let contacts = try await fetchPage(offset: 0)
             let imports = try await service.leadBatches(partnerID: campaign.partnerID)
             campaign = current; leads = contacts; batches = imports
-            let eligible = Set(contacts.filter(\.eligible_for_sms).map(\.id))
-            selected = (hasLoaded ? selected : Set(current.config.leadIDs)).intersection(eligible)
+            if !hasLoaded { selected = Set(current.config.leadIDs) }
+            for contact in contacts where !contact.eligible_for_sms { selected.remove(contact.id) }
+            nextOffset = contacts.count; hasMore = contacts.count == 250
             hasLoaded = true
+        } catch { notice = error.localizedDescription }
+    }
+    private func fetchPage(offset: Int) async throws -> [CampaignLead] {
+        try await service.campaignLeads(partnerID: campaign.partnerID,
+            campaignID: listID == "campaign" ? campaign.id : nil,
+            importID: UUID(uuidString: listID), eligibility: filter,
+            search: String(search.prefix(200)), offset: offset)
+    }
+    func loadMore() async {
+        guard !isBusy && hasMore else { return }
+        isBusy = true; notice = nil
+        defer { isBusy = false }
+        do {
+            let page = try await fetchPage(offset: nextOffset)
+            let existingIDs = Set(leads.map(\.id))
+            leads += page.filter { !existingIDs.contains($0.id) }
+            for contact in page where !contact.eligible_for_sms { selected.remove(contact.id) }
+            nextOffset += page.count; hasMore = page.count == 250
         } catch { notice = error.localizedDescription }
     }
     func toggle(_ lead: CampaignLead) {
         guard lead.eligible_for_sms && !isBusy else { return }
         if selected.contains(lead.id) { selected.remove(lead.id) }
-        else if selected.count < 500 { selected.insert(lead.id) }
-        else { notice = "A campaign supports up to 500 recipients." }
+        else if selected.count < 10000 { selected.insert(lead.id) }
+        else { notice = "A campaign supports up to 10,000 recipients." }
     }
     func selectVisible() {
         let eligible = visible.filter(\.eligible_for_sms).map(\.id)
-        let available = 500 - selected.count
+        let available = 10000 - selected.count
         let additions = eligible.filter { !selected.contains($0) }
         selected.formUnion(additions.prefix(available))
-        if additions.count > available { notice = "Selected up to the 500-recipient campaign limit." }
+        if additions.count > available { notice = "Selected up to the 10,000-recipient campaign limit." }
+    }
+    func selectAllEligible() async {
+        guard !isBusy && hasLoaded else { return }
+        isBusy = true; notice = nil
+        defer { isBusy = false }
+        do {
+            let ids = try await service.eligibleLeadIDs(partnerID: campaign.partnerID,
+                campaignID: listID == "campaign" ? campaign.id : nil,
+                importID: UUID(uuidString: listID), search: String(search.prefix(200)))
+            selected = Set(ids)
+            filter = "eligible"
+            leads = []
+            let page = try await fetchPage(offset: 0)
+            leads = page; nextOffset = page.count; hasMore = page.count == 250
+            notice = "Selected all \(ids.count) eligible leads matching this list and search. Save eligible recipients to apply."
+        } catch { notice = error.localizedDescription }
     }
     func reviewed(_ lead: CampaignLead) {
         if let index = leads.firstIndex(where: { $0.id == lead.id }) { leads[index] = lead }
@@ -79,6 +117,19 @@ final class LeadPermissionViewModel {
     let lead: CampaignLead
     let partnerID: UUID
     let service: any OutreachServicing
+    var showsPermissionEditor = false
+    var statusTitle: String {
+        if lead.opted_out || lead.sms_permission == "revoked" { return "Do not text — opted out" }
+        if lead.eligible_for_sms { return "Eligible for texts" }
+        if lead.status == "excluded" { return "Excluded from texts" }
+        return "Not eligible — permission needed"
+    }
+    var statusExplanation: String {
+        if lead.opted_out || lead.sms_permission == "revoked" { return "This contact asked to stop texts and cannot be re-enabled here." }
+        if lead.eligible_for_sms { return "SMS permission is recorded. This contact can be selected for campaign outreach." }
+        if lead.status == "excluded" { return "This contact has been excluded from campaign outreach." }
+        return "Record their permission before selecting this contact. Importing a lead does not grant permission."
+    }
     var action = "record_permission"
     var evidence = ""
     var source = ""

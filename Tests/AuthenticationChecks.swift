@@ -257,6 +257,53 @@ struct AuthenticationChecks {
         check(settingsModel.notice?.contains("Preview") == true)
         settingsModel.clearImport()
         check(settingsModel.canSave)
+        func leadJSON(_ leadID: UUID) -> [String: Any] {
+            ["id": leadID.uuidString, "import_id": id.uuidString, "name": "Lead", "phone": "12025550101", "email": "", "status": "eligible", "revision": 1, "sms_permission": "recorded", "permission_evidence": "Recorded permission", "opted_out": false, "eligible_for_sms": true, "exclusion_reasons": []]
+        }
+        let pageIDs = (0..<250).map { _ in UUID() }
+        let firstPage = String(data: try JSONSerialization.data(withJSONObject: pageIDs.map(leadJSON)), encoding: .utf8)!
+        let finalPage = String(data: try JSONSerialization.data(withJSONObject: [leadJSON(UUID())]), encoding: .utf8)!
+        let pageTransport = AuthenticationTransport([(200, token), (200, campaignJSON), (200, firstPage), (200, "[]"), (200, finalPage), (200, campaignJSON), (200, "[]"), (200, "[]")])
+        let pageService = SupabaseSession(store: MemorySessionStore(), transport: pageTransport)
+        try await pageService.signIn(email: "user@example.com", password: "password")
+        let pager = RecipientReviewViewModel(campaign: fetched, service: pageService)
+        pager.listID = "all"
+        await pager.load()
+        check(pager.leads.count == 250 && pager.hasMore)
+        pager.toggle(pager.leads[0])
+        let retainedSelection = pager.selected
+        await pager.loadMore()
+        check(pager.leads.count == 251 && !pager.hasMore && pager.selected == retainedSelection)
+        pager.filter = "excluded"
+        await pager.load()
+        check(pager.leads.isEmpty && pager.selected == retainedSelection)
+        let pageRequests = await pageTransport.requests
+        let query = URLComponents(url: pageRequests[4].url!, resolvingAgainstBaseURL: false)!.queryItems!
+        check(query.contains(URLQueryItem(name: "limit", value: "250")))
+        check(query.contains(URLQueryItem(name: "offset", value: "250")))
+        check(URLComponents(url: pageRequests[6].url!, resolvingAgainstBaseURL: false)!.queryItems!.contains(URLQueryItem(name: "eligibility", value: "excluded")))
+        let allSelectionIDs = (0..<550).map { _ in UUID() }
+        let selectionJSON = String(data: try JSONEncoder().encode(allSelectionIDs), encoding: .utf8)!
+        let eligiblePageJSON = String(data: try JSONSerialization.data(withJSONObject: allSelectionIDs.prefix(250).map(leadJSON)), encoding: .utf8)!
+        let allTransport = AuthenticationTransport([(200, token), (200, selectionJSON), (200, eligiblePageJSON), (200, campaignJSON)])
+        let allService = SupabaseSession(store: MemorySessionStore(), transport: allTransport)
+        try await allService.signIn(email: "user@example.com", password: "password")
+        let allModel = RecipientReviewViewModel(campaign: fetched, service: allService)
+        allModel.hasLoaded = true; allModel.listID = "all"; allModel.filter = "all"
+        await allModel.selectAllEligible()
+        check(allModel.selected == Set(allSelectionIDs) && allModel.leads.count == 250)
+        check(allModel.filter == "eligible" && allModel.visible.allSatisfy { allModel.selected.contains($0.id) })
+        let listEditor = SavedCampaignViewModel(campaign: fetched, service: allService)
+        check(await listEditor.removeLeadList() != nil)
+        let allRequests = await allTransport.requests
+        check(allRequests[1].url?.path.hasSuffix("eligible-recipient-ids") == true)
+        let removalBody = try JSONSerialization.jsonObject(with: allRequests[3].httpBody!) as! [String: Any]
+        let removalConfig = removalBody["config"] as! [String: Any]
+        check((removalConfig["lead_ids"] as! [String]).isEmpty)
+        check(permissionModel.statusTitle == "Not eligible — permission needed")
+        check(!permissionModel.showsPermissionEditor)
+        let eligibleStatus = LeadPermissionViewModel(lead: allowedLead, partnerID: id, service: editService)
+        check(eligibleStatus.statusTitle == "Eligible for texts")
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }
