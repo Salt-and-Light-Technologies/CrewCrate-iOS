@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CreateAccountView: View {
-    @State private var viewModel = AuthenticationViewModel()
+    @Environment(AuthenticationViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -23,9 +23,9 @@ struct CreateAccountView: View {
                     SecureField("Re-enter your password", text: $viewModel.confirmPassword)
                         .textContentType(.newPassword)
                         .submitLabel(.go)
-                        .onSubmit { viewModel.createAccount() }
+                        .onSubmit { Task { await viewModel.createAccount() } }
                 }
-                Button("Create account") { viewModel.createAccount() }
+                Button("Create account") { Task { await viewModel.createAccount() } }
                     .buttonStyle(AuthenticationButtonStyle())
                 Button("Already have an account? Log in") { dismiss() }
                     .font(.subheadline.weight(.semibold))
@@ -34,10 +34,6 @@ struct CreateAccountView: View {
         }
         .navigationTitle("Create account")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("CrewCrate", isPresented: Binding(get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } })) {
-            Button("OK", role: .cancel) { viewModel.notice = nil }
-        } message: {
-            Text(viewModel.notice ?? "")
-        }
+        .disabled(viewModel.isBusy)
     }
 }

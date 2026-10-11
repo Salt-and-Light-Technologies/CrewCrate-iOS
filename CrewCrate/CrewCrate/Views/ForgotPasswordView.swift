@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ForgotPasswordView: View {
-    @State private var viewModel = AuthenticationViewModel()
+    @Environment(AuthenticationViewModel.self) private var viewModel
 
     var body: some View {
         @Bindable var viewModel = viewModel
@@ -14,18 +14,14 @@ struct ForgotPasswordView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.send)
-                        .onSubmit { viewModel.resetPassword() }
+                        .onSubmit { Task { await viewModel.resetPassword() } }
                 }
-                Button("Send reset link") { viewModel.resetPassword() }
+                Button("Send reset link") { Task { await viewModel.resetPassword() } }
                     .buttonStyle(AuthenticationButtonStyle())
             }
         }
         .navigationTitle("Forgot password")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("CrewCrate", isPresented: Binding(get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } })) {
-            Button("OK", role: .cancel) { viewModel.notice = nil }
-        } message: {
-            Text(viewModel.notice ?? "")
-        }
+        .disabled(viewModel.isBusy)
     }
 }

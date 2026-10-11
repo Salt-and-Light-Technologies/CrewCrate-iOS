@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LoginView: View {
-    @State private var viewModel = AuthenticationViewModel()
+    @Environment(AuthenticationViewModel.self) private var viewModel
     @FocusState private var focusedField: Field?
     private enum Field { case email, password }
 
@@ -24,7 +24,7 @@ struct LoginView: View {
                         .textContentType(.password)
                         .focused($focusedField, equals: .password)
                         .submitLabel(.go)
-                        .onSubmit { focusedField = nil; viewModel.login() }
+                        .onSubmit { focusedField = nil; Task { await viewModel.login() } }
                 }
                 NavigationLink("Forgot password?") {
                     ForgotPasswordView()
@@ -35,7 +35,7 @@ struct LoginView: View {
 
                 Button("Log in") {
                     focusedField = nil
-                    viewModel.login()
+                    Task { await viewModel.login() }
                 }
                 .buttonStyle(AuthenticationButtonStyle())
 
@@ -51,10 +51,6 @@ struct LoginView: View {
                 .padding(.top, 8)
             }
         }
-        .alert("CrewCrate", isPresented: Binding(get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } })) {
-            Button("OK", role: .cancel) { viewModel.notice = nil }
-        } message: {
-            Text(viewModel.notice ?? "")
-        }
+        .disabled(viewModel.isBusy)
     }
 }
