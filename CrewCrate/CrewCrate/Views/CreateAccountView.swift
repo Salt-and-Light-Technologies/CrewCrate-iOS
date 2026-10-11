@@ -6,7 +6,7 @@ struct CreateAccountView: View {
 
     var body: some View {
         @Bindable var viewModel = viewModel
-        AuthenticationLayout(title: "Create your account", subtitle: "Get started with CrewCrate.") {
+        AuthenticationLayout(title: "Create your account", subtitle: "Create your login, then set up your business.") {
             VStack(spacing: 20) {
                 AuthenticationField(label: "Email") {
                     TextField("you@company.com", text: $viewModel.email)
@@ -25,6 +25,7 @@ struct CreateAccountView: View {
                         .submitLabel(.go)
                         .onSubmit { Task { await viewModel.createAccount() } }
                 }
+                Text("After confirming your email and signing in, you’ll enter your business information to create your workspace.").font(.footnote).foregroundStyle(.secondary)
                 Button("Create account") { Task { await viewModel.createAccount() } }
                     .buttonStyle(AuthenticationButtonStyle())
                 Button("Already have an account? Log in") { dismiss() }

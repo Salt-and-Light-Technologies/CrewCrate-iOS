@@ -33,3 +33,9 @@ nonisolated protocol TestAIServicing: Sendable {
     func aiTest(partnerID: UUID, testID: UUID) async throws -> AITestConversation
     func sendAITest(partnerID: UUID, testID: UUID, revision: Int, requestID: UUID, text: String) async throws -> AITestConversation
 }
+
+
+nonisolated protocol BusinessServicing: Sendable {
+    func businesses() async throws -> [BusinessWorkspace]
+    func saveBusiness(id: UUID?, revision: Int?, details: BusinessDetails) async throws -> BusinessWorkspace
+}

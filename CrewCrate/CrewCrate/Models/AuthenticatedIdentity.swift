@@ -85,3 +85,20 @@ nonisolated struct AITestDecision: Decodable, Identifiable, Sendable {
     }
     enum CodingKeys: String, CodingKey { case id, decision, reason; case handoffSummary = "handoff_summary" }
 }
+
+
+nonisolated struct BusinessDetails: Codable, Sendable {
+    var business_name = ""
+    var website = ""
+    var industry = ""
+    var services = ""
+    var service_area = ""
+    var time_zone = ""
+    var ai_boundaries = ""
+}
+
+nonisolated struct BusinessWorkspace: Decodable, Identifiable, Sendable {
+    let id: UUID
+    let revision: Int
+    let onboarding: BusinessDetails
+}

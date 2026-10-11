@@ -14,3 +14,10 @@ TestAIServicing. SavedCampaignDetailsView passes the saved campaign ID; the draf
 editor passes its validated current config. SupabaseSession handles all HTTP/JWT and
 DTO work. AITestViewModel retains pending request UUID/text/revision for safe turn
 retries. Backend state controls whether the composer is available.
+
+BusinessProfileView uses an Observation BusinessViewModel and injected BusinessServicing.
+SignedInTabView owns the model, presents missing-workspace setup after authentication,
+and refreshes Campaigns after saving. Account reuses this model for business editing.
+SupabaseSession sends authenticated requests to /v1/me/business and partner business
+updates; business data is stored in existing partner onboarding records, separate from
+personal Supabase profile metadata. Email confirmation can precede business onboarding.

@@ -38,3 +38,12 @@ TestAIServicing using JWT-authenticated CrewCrate endpoints. Test DTOs remain in
 existing Models/AuthenticatedIdentity.swift source file, alongside other API DTOs.
 Backend deployment and the new ai_test_sessions migration are required before use;
 see ../CrewCrate-Backend/TEST_AI.md for exact rollout and manual device checks.
+
+Business onboarding opens after authentication when no workspace is available, including
+for existing accounts. Email-confirmation signups complete business setup on their first
+sign-in. Users can defer setup and return through Account → Set up your business. Once
+saved, campaigns reload with the assigned workspace. Account → Edit business information
+updates business name, website, industry, services/products, service area, time zone and
+AI boundaries; users with several businesses select one in that screen. The backend binds
+creation to the verified user and stores updates with expected revisions. Deploy the new
+backend endpoints before testing. No additional database migration is needed.

@@ -16,6 +16,7 @@ final class AITestViewModel {
     init(service: any TestAIServicing, partnerID: UUID, campaignID: UUID? = nil, config: CampaignDetails? = nil) {
         self.service = service; self.partnerID = partnerID; self.campaignID = campaignID; self.config = config
     }
+    var canRetryReply: Bool { pending != nil && !isBusy }
     var canSend: Bool { conversation?.isActive == true && !isBusy && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && message.count <= 2000 }
     func start() async {
         guard !isBusy else { return }
@@ -41,6 +42,11 @@ final class AITestViewModel {
             self.conversation = try await service.sendAITest(partnerID: partnerID, testID: conversation.id, revision: attempt.revision, requestID: attempt.id, text: attempt.text)
             message = ""; pending = nil
         } catch { self.error = error.localizedDescription }
+    }
+    func retryReply() async {
+        guard !isBusy, let pending else { return }
+        message = pending.text
+        await send()
     }
     func refresh() async {
         guard !isBusy, let conversation else { return }

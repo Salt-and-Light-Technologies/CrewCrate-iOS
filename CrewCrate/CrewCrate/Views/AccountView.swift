@@ -4,6 +4,8 @@ import PhotosUI
 struct AccountView: View {
     @Environment(AuthenticationViewModel.self) private var authentication
     @State var viewModel: AccountViewModel
+    let business: BusinessViewModel
+    var onBusinessSaved: (() -> Void)?
 
     var body: some View {
         @Bindable var viewModel = viewModel
@@ -48,6 +50,13 @@ struct AccountView: View {
                     .disabled(viewModel.isBusy || !viewModel.hasLoaded)
                 if !viewModel.hasLoaded && !viewModel.isLoading {
                     Button("Retry loading account") { Task { await viewModel.load() } }
+                }
+            }
+            Section("Business") {
+                NavigationLink {
+                    BusinessProfileView(viewModel: business, onSaved: onBusinessSaved)
+                } label: {
+                    Label(business.workspaces.isEmpty ? "Set up your business" : "Edit business information", systemImage: "building.2")
                 }
             }
             Section {

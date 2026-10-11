@@ -41,6 +41,9 @@ struct AITestView: View {
                                 if viewModel.conversation == nil {
                                     Button("Retry starting test") { Task { await viewModel.start() } }
                                 } else {
+                                    if viewModel.canRetryReply {
+                                        Button("Retry reply") { Task { await viewModel.retryReply() } }
+                                    }
                                     Button("Refresh conversation") { Task { await viewModel.refresh() } }
                                 }
                             }

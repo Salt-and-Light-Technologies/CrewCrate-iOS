@@ -123,6 +123,44 @@ struct AuthenticationChecks {
         check(turnBody["expected_revision"] as? Int == 0)
         check(turnBody["request_id"] as? String == turnID.uuidString)
         check(aiRequests[3].httpMethod == "GET")
+        var businessDetails = BusinessDetails()
+        businessDetails.business_name = "Roofing Co"
+        businessDetails.services = "Repairs"
+        let businessJSON = "{\"id\":\"\(id)\",\"revision\":1,\"onboarding\":\(String(data: try JSONEncoder().encode(businessDetails), encoding: .utf8)!)}"
+        let businessTransport = AuthenticationTransport([(200, token), (200, "[]"), (200, businessJSON), (200, businessJSON)])
+        let businessService = SupabaseSession(store: MemorySessionStore(), transport: businessTransport)
+        try await businessService.signIn(email: "user@example.com", password: "password")
+        let businessModel = BusinessViewModel(service: businessService)
+        await businessModel.load()
+        check(businessModel.hasLoaded)
+        businessModel.details = businessDetails
+        check(await businessModel.save())
+        check(businessModel.selectedID == id)
+        check(await businessModel.save())
+        let businessRequests = await businessTransport.requests
+        check(businessRequests[2].url?.path == "/v1/me/business")
+        check(businessRequests[2].httpMethod == "POST")
+        check(businessRequests[3].httpMethod == "PUT")
+        check(businessRequests[3].value(forHTTPHeaderField: "Authorization") == "Bearer access")
+        let businessBody = try JSONSerialization.jsonObject(with: businessRequests[3].httpBody!) as! [String: Any]
+        check(businessBody["expected_revision"] as? Int == 1)
+        check(businessBody["business_name"] as? String == "Roofing Co")
+        let retryTransport = AuthenticationTransport([(200, token), (201, testJSON), (502, "{\"detail\":\"Try again\"}"), (200, testJSON)])
+        let retryService = SupabaseSession(store: MemorySessionStore(), transport: retryTransport)
+        try await retryService.signIn(email: "user@example.com", password: "password")
+        let retryModel = AITestViewModel(service: retryService, partnerID: id, config: details)
+        await retryModel.start()
+        retryModel.message = "Do you have other musicians?"
+        await retryModel.send()
+        check(retryModel.canRetryReply && retryModel.error != nil)
+        check(retryModel.message == "Do you have other musicians?")
+        retryModel.message = "Edited after failure"
+        await retryModel.retryReply()
+        check(!retryModel.canRetryReply && retryModel.error == nil)
+        let retryRequests = await retryTransport.requests
+        let firstAttempt = try JSONSerialization.jsonObject(with: retryRequests[2].httpBody!) as! NSDictionary
+        let secondAttempt = try JSONSerialization.jsonObject(with: retryRequests[3].httpBody!) as! NSDictionary
+        check(firstAttempt == secondAttempt)
         print("Authentication checks passed (mock services; no live accounts or emails).")
     }
 }

@@ -104,7 +104,7 @@ final class AuthenticationViewModel {
             let signedIn = try await self.service.signUp(email: self.normalizedEmail, password: self.password)
             self.password = ""; self.confirmPassword = ""
             if signedIn { self.identity = try await self.service.identity() }
-            else { self.notice = "Check your email to confirm your account, then return here to log in." }
+            else { self.notice = "Check your email to confirm your account, then return here to log in and set up your business." }
         }
     }
 

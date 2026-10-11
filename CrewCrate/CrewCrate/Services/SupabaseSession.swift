@@ -12,7 +12,7 @@ nonisolated enum AuthError: LocalizedError {
         }
     }
 }
-actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServicing {
+actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServicing, BusinessServicing {
     private let store: any AuthSessionStore
     private let transport: any LeadHTTPTransport
     private var session: AuthSession?
@@ -160,12 +160,28 @@ actor SupabaseSession: AuthenticationServicing, AccountServicing, CampaignServic
         let data = try await backendRequest(path: "v1/partners/\(partnerID)/ai-tests/\(testID)/messages", body: JSONEncoder().encode(Turn(expected_revision: revision, request_id: requestID, text: text)))
         return try JSONDecoder().decode(AITestConversation.self, from: data)
     }
-    private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil) async throws -> Data {
+    func businesses() async throws -> [BusinessWorkspace] {
+        var result: [BusinessWorkspace] = []
+        while true {
+            let data = try await backendRequest(path: "v1/partners", offset: result.count)
+            let page = try JSONDecoder().decode([BusinessWorkspace].self, from: data)
+            result += page
+            if page.count < 100 { return result }
+        }
+    }
+    func saveBusiness(id: UUID?, revision: Int?, details: BusinessDetails) async throws -> BusinessWorkspace {
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(details)) as! [String: Any]
+        if let revision { object["expected_revision"] = revision }
+        let data = try await backendRequest(path: id.map { "v1/partners/\($0)/business" } ?? "v1/me/business",
+                                            body: JSONSerialization.data(withJSONObject: object), method: id == nil ? "POST" : "PUT")
+        return try JSONDecoder().decode(BusinessWorkspace.self, from: data)
+    }
+    private func backendRequest(path: String, offset: Int? = nil, body: Data? = nil, method: String? = nil) async throws -> Data {
         var url = LiveConfiguration.apiURL.appendingPathComponent(path)
         if let offset { url = url.appending(queryItems: [URLQueryItem(name: "limit", value: "100"), URLQueryItem(name: "offset", value: String(offset))]) }
         var request = URLRequest(url: url)
         request.timeoutInterval = path.contains("ai-tests") ? 75 : 30
-        request.httpMethod = body == nil ? "GET" : "POST"
+        request.httpMethod = method ?? (body == nil ? "GET" : "POST")
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
