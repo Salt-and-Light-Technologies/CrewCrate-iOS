@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SavedCampaignDetailsView: View {
+    @State private var confirmsRemoveList = false
     @State private var viewModel: SavedCampaignViewModel
     var onSaved: ((CampaignSummary) -> Void)?
     init(campaign: CampaignSummary, service: any CampaignServicing, onSaved: ((CampaignSummary) -> Void)? = nil) {
@@ -15,27 +16,15 @@ struct SavedCampaignDetailsView: View {
                 LabeledContent("Campaign leads", value: String(viewModel.campaign.config.leadIDs.count))
                 Text(viewModel.campaign.config.offer.isEmpty ? "No offer entered" : viewModel.campaign.config.offer)
             }
-            Section("Recipient review") {
+            Section("Campaign leads") {
                 NavigationLink {
                     RecipientReviewView(viewModel: RecipientReviewViewModel(campaign: viewModel.campaign, service: viewModel.service), onSaved: {
                         viewModel.didSave($0); onSaved?($0)
                     })
-                } label: { Label("Review and select leads", systemImage: "person.crop.circle.badge.checkmark") }
-            }
-            Section("Sending readiness") {
-                LabeledContent("Status", value: viewModel.campaign.status.replacingOccurrences(of: "_", with: " ").capitalized)
-                LabeledContent("Recipients passing checks", value: String(viewModel.campaign.recipientCount ?? 0))
-                if viewModel.campaign.config.messageTemplate.isEmpty {
-                    Text("Your AI assistant will create the opening message when you check campaign readiness.").foregroundStyle(.secondary)
-                } else { Text(viewModel.campaign.config.messageTemplate) }
-                ForEach(Array((viewModel.campaign.blockers ?? []).enumerated()), id: \.offset) { _, blocker in
-                    Text(blocker).font(.footnote).foregroundStyle(.secondary)
-                }
-                Button("Check campaign readiness") {
-                    Task { if let campaign = await viewModel.prepare() { onSaved?(campaign) } }
-                }.disabled(!viewModel.canPrepare)
-                Button("Start messages") { Task { await viewModel.start() } }.disabled(!viewModel.canStart)
-                Text("SMS provider connection is pending. No messages will be queued or sent until a provider is connected and sending requirements pass.").font(.footnote).foregroundStyle(.secondary)
+                } label: { Label("Edit lead list / Review permissions", systemImage: "person.crop.circle.badge.checkmark") }
+                Button("Remove lead list", role: .destructive) { confirmsRemoveList = true }
+                    .disabled(!viewModel.canEdit || viewModel.campaign.config.leadIDs.isEmpty || viewModel.campaign.ownerHold == true)
+                Text("Edit the selected recipients or remove this list from the campaign. Business contacts and opt-outs are preserved.").font(.footnote).foregroundStyle(.secondary)
             }
             Section("AI assistant") {
                 LabeledContent("AI name", value: viewModel.campaign.config.aiName ?? "CrewCrate Assistant")
@@ -56,6 +45,14 @@ struct SavedCampaignDetailsView: View {
                     Button("Reload campaign") { Task { await viewModel.load() } }
                 }
             }
+            Section {
+                Button("Start messages", systemImage: "paperplane.fill") {
+                    viewModel.showSMSConnectionNotice()
+                }
+                .disabled(viewModel.isLoading)
+            } footer: {
+                Text("Connect an SMS provider to start sending messages.")
+            }
         }
         .navigationTitle("Campaign details")
         .toolbar {
@@ -63,6 +60,11 @@ struct SavedCampaignDetailsView: View {
                 Button("Edit") { viewModel.showsEditor = true }.disabled(!viewModel.canEdit)
             }
         }
+        .confirmationDialog("Remove all leads from this campaign?", isPresented: $confirmsRemoveList, titleVisibility: .visible) {
+            Button("Remove lead list", role: .destructive) {
+                Task { if let updated = await viewModel.removeLeadList() { onSaved?(updated) } }
+            }
+        } message: { Text("This resets campaign preparation. Contact records and permissions are kept.") }
         .onAppear { Task { await viewModel.load() } }
         .refreshable { await viewModel.load() }
         .alert("Campaign messages", isPresented: Binding(get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } })) {

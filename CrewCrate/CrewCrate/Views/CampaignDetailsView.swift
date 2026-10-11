@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct CampaignDetailsView: View {
     @State private var confirmsDiscard = false
+    @State private var confirmsRemoveLeads = false
     @State var viewModel: CampaignDetailsViewModel
     var onSaved: ((CampaignSummary) -> Void)?
     @Environment(\.dismiss) private var dismiss
@@ -34,6 +35,7 @@ struct CampaignDetailsView: View {
                 Section("Campaign leads") {
                     if !viewModel.details.leadIDs.isEmpty {
                         Text("\(viewModel.details.leadIDs.count) leads already selected")
+                        Button("Remove lead list", role: .destructive) { confirmsRemoveLeads = true }
                     }
                     Button(viewModel.contactFile == nil ? "Upload contact file" : "Choose another file", systemImage: "doc.badge.plus") {
                         viewModel.showsFilePicker = true
@@ -71,10 +73,10 @@ struct CampaignDetailsView: View {
                         } else { Text("Preview this file before saving.").font(.footnote).foregroundStyle(.secondary) }
                         Button("Remove selected file", role: .destructive) { viewModel.clearImport() }
                     }
-                    Text("CSV, TSV or Excel .xlsx, up to 5 MB. For Google Sheets or Numbers, export to one of these formats. Use headers in row 1 and store phone numbers as text. Up to 500 distinct leads per campaign. Importing does not establish permission to text.").font(.footnote).foregroundStyle(.secondary)
+                    Text("CSV, TSV or Excel .xlsx, up to 5 MB. For Google Sheets or Numbers, export to one of these formats. Use headers in row 1 and store phone numbers as text. Up to 10,000 distinct leads per campaign. Importing does not establish permission to text.").font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Sending settings") {
-                    Text("Your AI assistant creates the opening message from your business information, offer and instructions when you check campaign readiness.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Your AI assistant creates the opening message from your business information, offer and instructions before campaign outreach begins.").font(.footnote).foregroundStyle(.secondary)
                     Picker("Time zone", selection: $viewModel.details.timeZone) {
                         ForEach(viewModel.timeZones, id: \.self) { zone in
                             Text(zone.replacingOccurrences(of: "_", with: " ")).tag(zone)
@@ -137,6 +139,9 @@ struct CampaignDetailsView: View {
                         .disabled(viewModel.isSaving || viewModel.isImporting)
                 }
             }
+            .confirmationDialog("Remove the lead list?", isPresented: $confirmsRemoveLeads, titleVisibility: .visible) {
+                Button("Remove lead list", role: .destructive) { viewModel.details.leadIDs = []; viewModel.clearImport() }
+            } message: { Text("Save changes to apply. Business contacts and permissions are kept.") }
             .fileImporter(isPresented: $viewModel.showsFilePicker, allowedContentTypes: [.commaSeparatedText, .tabSeparatedText, UTType(filenameExtension: "xlsx") ?? .data]) { result in
                 Task { await viewModel.chooseFile(result) }
             }
