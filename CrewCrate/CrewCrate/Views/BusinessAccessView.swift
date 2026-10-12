@@ -321,10 +321,14 @@ private struct CrewCrateAccountView: View {
             Section("Your account") {
                 Label(isOwner ? "Platform owner" : businesses.contains(where: { $0.member_role == "worker" }) ? "Worker account" : "Business account", systemImage: "person.crop.circle")
             }
-            if !isOwner, let workerService {
+            if !isOwner, let workerService,
+               !businesses.contains(where: { $0.member_role == "worker" }) ||
+               businesses.contains(where: { $0.member_role == "admin" }) {
                 Section("Your team") {
-                    NavigationLink("Accept worker invitation") {
-                        AcceptWorkerInvitationView(service: workerService, accepted: accepted)
+                    if !businesses.contains(where: { $0.member_role == "worker" }) {
+                        NavigationLink("Accept worker invitation") {
+                            AcceptWorkerInvitationView(service: workerService, accepted: accepted)
+                        }
                     }
                     ForEach(businesses.filter { $0.member_role == "admin" }) { business in
                         NavigationLink("Manage \(business.name) team") {
