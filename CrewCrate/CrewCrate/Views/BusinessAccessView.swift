@@ -5,11 +5,13 @@ struct BusinessAccessView: View {
     @Environment(\.scenePhase) private var scenePhase
     private let campaignService: any CampaignWorkspaceServicing & WorkspaceContactServicing
     private let profileService: any BusinessProfileServicing
+    private let analyticsService: any OwnerAnalyticsServicing
 
-    init(identity: AuthenticatedIdentity, service: any BusinessApplicationServicing & CampaignWorkspaceServicing & BusinessProfileServicing & WorkspaceContactServicing) {
+    init(identity: AuthenticatedIdentity, service: any BusinessApplicationServicing & CampaignWorkspaceServicing & BusinessProfileServicing & WorkspaceContactServicing & OwnerAnalyticsServicing) {
         _model = State(initialValue: BusinessAccessViewModel(isOwner: identity.isOwner, service: service))
         campaignService = service
         profileService = service
+        analyticsService = service
     }
 
     var body: some View {
@@ -83,11 +85,17 @@ struct BusinessAccessView: View {
                 }
                 ForEach(model.businesses) { business in
                     NavigationLink {
-                        CampaignWorkspaceView(business: business, service: campaignService)
+                        if model.isOwner {
+                            OwnerBusinessAnalyticsView(business: business, analyticsService: analyticsService,
+                                campaignService: campaignService)
+                        } else {
+                            CampaignWorkspaceView(business: business, service: campaignService)
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(business.name).font(.headline)
-                            Text("Business workspace").font(.subheadline).foregroundStyle(.secondary)
+                            Text(model.isOwner ? "View business analytics" : "Business workspace")
+                                .font(.subheadline).foregroundStyle(.secondary)
                         }.padding(.vertical, 6)
                     }
                 }
@@ -100,10 +108,13 @@ struct BusinessAccessView: View {
     private var requestInbox: some View {
         List {
             if model.isLoading { ProgressView("Loading requests…") }
-            if let error = model.error {
-                Section { Text(error).foregroundStyle(.red) }
+            if let error = model.requestsError {
+                Section {
+                    Text(error).foregroundStyle(.red)
+                    Button("Reload requests") { Task { await model.load() } }.disabled(model.isBusy)
+                }
             }
-            if model.hasLoaded && model.requests.isEmpty {
+            if model.hasLoadedRequests && model.requestsError == nil && model.requests.isEmpty {
                 ContentUnavailableView("You’re all caught up", systemImage: "checkmark.circle",
                     description: Text("New business applications will appear here."))
             }
@@ -257,7 +268,7 @@ private struct CrewCrateAccountView: View {
             Section("Your account") {
                 Label(isOwner ? "Platform owner" : "Business account", systemImage: "person.crop.circle")
             }
-            if !businesses.isEmpty {
+            if !isOwner && !businesses.isEmpty {
                 Section("Business information") {
                     ForEach(businesses) { business in
                         NavigationLink(business.name) {

@@ -57,6 +57,11 @@ private actor ReaderFake: ContactUploadReading {
         ContactUpload(filename: "contacts.csv", data: Data("Phone,Name\n15551234567,Sam".utf8))
     }
 }
+private actor OwnerAnalyticsFake: OwnerAnalyticsServicing {
+    let response: OwnerBusinessAnalytics
+    init(response: OwnerBusinessAnalytics) { self.response = response }
+    func ownerAnalytics(business: UUID) async throws -> OwnerBusinessAnalytics { response }
+}
 nonisolated private struct SessionStoreFake: AuthSessionStore {
     let session: AuthSession
     func load() throws -> AuthSession? { session }
@@ -177,6 +182,26 @@ struct CampaignWorkspaceChecks {
         let profileJSON = try JSONSerialization.jsonObject(with: profileRequest.httpBody!) as! [String: Any]
         precondition(profileRequest.httpMethod == "PUT" && profileJSON["expected_revision"] as? Int == 5)
         precondition(profileJSON["offer"] == nil) // profile edits leave unrelated fields to server-side preservation
+        let analyticsData = try JSONSerialization.data(withJSONObject: [
+            "partner_id": business.id.uuidString, "name": business.name, "access_approved": true,
+            "total_contacts": 12, "import_count": 2, "campaign_count": 0,
+            "campaign_status_counts": [:], "lead_status_counts": ["unreviewed": 12],
+            "manual_conversation_count": 0, "manual_status_counts": [:], "sms_connected": false,
+        ])
+        let analytics = try JSONDecoder().decode(OwnerBusinessAnalytics.self, from: analyticsData)
+        let ownerModel = OwnerBusinessAnalyticsModel(business: business,
+            analyticsService: OwnerAnalyticsFake(response: analytics), campaignService: service)
+        await ownerModel.load()
+        precondition(ownerModel.analytics?.total_contacts == 12 && ownerModel.analyticsError == nil)
+        precondition(ownerModel.campaigns.isEmpty && !ownerModel.isLoading)
+        let analyticsTransport = TransportFake(response: analyticsData)
+        let analyticsSession = SupabaseSession(store: SessionStoreFake(session: AuthSession(accessToken: "test-token",
+            refreshToken: "test-refresh", expiresAt: Date().addingTimeInterval(3600), userID: UUID())), transport: analyticsTransport)
+        _ = try await analyticsSession.restore()
+        _ = try await analyticsSession.ownerAnalytics(business: business.id)
+        let analyticsRequest = await analyticsTransport.requests[0]
+        precondition(analyticsRequest.httpMethod == "GET")
+        precondition(analyticsRequest.url!.path == "/v1/owner/partners/\(business.id)/analytics")
         print("Campaign editing, upload preview, retry and HTTP contract checks passed.")
     }
 }

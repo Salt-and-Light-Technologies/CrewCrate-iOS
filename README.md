@@ -1,5 +1,16 @@
 # CrewCrate iOS
 
+## Platform-owner business analytics
+
+The platform owner opens a separate read-only analytics view when selecting a business.
+It shows stored contact/import counts, campaign plans and manual follow-up statuses.
+There are no create/edit/practice/contact-review controls on this owner route, and Account
+does not expose business profile editing to the platform owner. Business accounts retain
+their campaign workflow. The backend rejects platform-owner campaign creation through
+both ordinary and campaign/import endpoints. Deploy the new owner analytics endpoint
+before testing; see ../CrewCrate-Backend/OWNER_ANALYTICS_SETUP.md. Financial reporting
+remains unavailable until actual payment/cost records are implemented.
+
 ## Two-step signup
 
 Business login now checks the application first. Pending/denied applicants cannot open
