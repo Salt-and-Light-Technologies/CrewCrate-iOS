@@ -9,6 +9,9 @@ struct LoginView: View {
         @Bindable var viewModel = viewModel
         AuthenticationLayout(title: "Welcome back", subtitle: "Log in to your CrewCrate account.") {
             VStack(spacing: 20) {
+                Toggle("Platform owner sign-in", isOn: $viewModel.signingInAsOwner)
+                    .font(.subheadline)
+                    .accessibilityHint("Owner access is verified by CrewCrate. Leave off for business sign-in.")
                 AuthenticationField(label: "Email") {
                     TextField("you@company.com", text: $viewModel.email)
                         .textContentType(.username)

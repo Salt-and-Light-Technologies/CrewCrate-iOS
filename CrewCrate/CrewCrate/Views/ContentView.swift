@@ -16,7 +16,7 @@ struct ContentView: View {
             } else if viewModel.needsPasswordUpdate {
                 NavigationStack { UpdatePasswordView() }
             } else if let identity = viewModel.identity {
-                SignedInTabView(service: service, userID: identity.userID)
+                BusinessAccessView(identity: identity, service: service)
                     .id(identity.userID)
             } else {
                 NavigationStack { LoginView() }

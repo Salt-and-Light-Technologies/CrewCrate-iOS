@@ -3,10 +3,11 @@ import SwiftUI
 struct CreateAccountView: View {
     @Environment(AuthenticationViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showingBusinessQuestions = false
 
     var body: some View {
         @Bindable var viewModel = viewModel
-        AuthenticationLayout(title: "Create your account", subtitle: "Create your login, then set up your business.") {
+        AuthenticationLayout(title: "Create your account", subtitle: "Step 1 of 2 · Your login details") {
             VStack(spacing: 20) {
                 AuthenticationField(label: "Email") {
                     TextField("you@company.com", text: $viewModel.email)
@@ -22,11 +23,12 @@ struct CreateAccountView: View {
                 AuthenticationField(label: "Confirm password") {
                     SecureField("Re-enter your password", text: $viewModel.confirmPassword)
                         .textContentType(.newPassword)
-                        .submitLabel(.go)
-                        .onSubmit { Task { await viewModel.createAccount() } }
+                        .submitLabel(.next)
+                        .onSubmit { continueSignup() }
                 }
-                Text("Next, check your email to confirm your account. Then tell us about your business.").font(.footnote).foregroundStyle(.secondary)
-                Button("Create account") { Task { await viewModel.createAccount() } }
+                Text("Next, tell us about your business. Your account won’t be created yet.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button("Continue") { continueSignup() }
                     .buttonStyle(AuthenticationButtonStyle())
                 Button("Already have an account? Log in") { dismiss() }
                     .font(.subheadline.weight(.semibold))
@@ -36,5 +38,15 @@ struct CreateAccountView: View {
         .navigationTitle("Create account")
         .navigationBarTitleDisplayMode(.inline)
         .disabled(viewModel.isBusy)
+        .navigationDestination(isPresented: $showingBusinessQuestions) {
+            SignupBusinessView()
+        }
+        .onAppear { viewModel.signupComplete = false }
+    }
+
+    private func continueSignup() {
+        guard viewModel.validateAccountDetails() else { return }
+        viewModel.signupBusiness.email = viewModel.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        showingBusinessQuestions = true
     }
 }

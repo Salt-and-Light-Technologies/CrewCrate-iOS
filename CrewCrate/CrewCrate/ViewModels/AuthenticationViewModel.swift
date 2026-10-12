@@ -7,6 +7,10 @@ final class AuthenticationViewModel {
     var email = ""
     var password = ""
     var confirmPassword = ""
+    var signingInAsOwner = false
+    var signupBusiness = BusinessApplicationDraft()
+    var signupComplete = false
+    var signupNeedsEmailConfirmation = true
     var notice: String?
     var isBusy = false
     var isRestoring = true
@@ -50,19 +54,12 @@ final class AuthenticationViewModel {
         }
     }
 
-    func deleteAccount() async {
-        await perform {
-            try await self.service.deleteAccount()
-            self.identity = nil
-            self.needsPasswordUpdate = false
-            self.password = ""; self.confirmPassword = ""
-        }
-    }
     func signOut() async {
         await perform {
             self.identity = nil
             self.needsPasswordUpdate = false
             self.password = ""; self.confirmPassword = ""
+            self.signupBusiness = BusinessApplicationDraft()
             try await self.service.signOut()
         }
     }
@@ -91,28 +88,45 @@ final class AuthenticationViewModel {
         await perform {
             try await self.service.signIn(email: self.normalizedEmail, password: self.password)
             self.password = ""
-            self.identity = try await self.service.identity()
+            let identity = try await self.service.identity()
+            if self.signingInAsOwner && !identity.isOwner {
+                try await self.service.signOut()
+                throw AuthenticationFailure(message: "This account does not have platform owner access. Choose business sign-in to continue.")
+            }
+            self.identity = identity
         }
     }
 
-    func createAccount() async {
+    func validateAccountDetails() -> Bool {
         guard validateEmail() else {
             notice = "Enter a valid email address."
-            return
+            return false
         }
         guard password.count >= 8 else {
             notice = "Use a password with at least 8 characters."
-            return
+            return false
         }
         guard password == confirmPassword else {
             notice = "Your passwords do not match."
+            return false
+        }
+        return true
+    }
+
+    func createAccount() async {
+        guard validateAccountDetails() else { return }
+        signupBusiness.email = normalizedEmail
+        guard signupBusiness.isComplete else {
+            notice = "Enter your business name, your name and a valid contact phone number."
             return
         }
         await perform {
-            let signedIn = try await self.service.signUp(email: self.normalizedEmail, password: self.password)
+            let signedIn = try await self.service.signUp(email: self.normalizedEmail, password: self.password, business: self.signupBusiness)
             self.password = ""; self.confirmPassword = ""
+            self.signupBusiness = BusinessApplicationDraft()
+            self.signupNeedsEmailConfirmation = !signedIn
+            self.signupComplete = true
             if signedIn { self.identity = try await self.service.identity() }
-            else { self.notice = "Check your email to confirm your account, then return here to log in and set up your business." }
         }
     }
 
