@@ -1,10 +1,13 @@
 import SwiftUI
 
 struct BusinessAccessView: View {
+    @State private var selectedTab = 0
     @State private var model: BusinessAccessViewModel
     @Environment(\.scenePhase) private var scenePhase
     private let campaignService: any CampaignWorkspaceServicing & WorkspaceContactServicing
     private let profileService: any BusinessProfileServicing
+    private let workerService: (any WorkerServicing)?
+    @Environment(WorkerPushState.self) private var push
     private let analyticsService: any OwnerAnalyticsServicing
 
     init(identity: AuthenticatedIdentity, service: any BusinessApplicationServicing & CampaignWorkspaceServicing & BusinessProfileServicing & WorkspaceContactServicing & OwnerAnalyticsServicing) {
@@ -12,21 +15,58 @@ struct BusinessAccessView: View {
         campaignService = service
         profileService = service
         analyticsService = service
+        workerService = service as? any WorkerServicing
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack { home }
-                .tabItem { Label(model.isOwner ? "Businesses" : "Home", systemImage: "house") }
+                .tag(0)
+                .badge(push.unread)
+                .tabItem { Label(model.isOwner ? "Businesses" : model.businesses.contains(where: { $0.member_role == "worker" }) ? "Incoming leads" : "Home", systemImage: "house") }
             if model.isOwner {
                 NavigationStack { requestInbox }
                     .tabItem { Label("Requests", systemImage: "tray") }
                     .badge(model.requests.count)
+                    .tag(1)
             }
             NavigationStack { account }
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
+                .tag(2)
         }
         .tint(AuthenticationStyle.purple)
+        .overlay(alignment: .top) {
+            if let banner = push.foregroundBanner, model.businesses.contains(where: { $0.member_role == "worker" }) {
+                HStack {
+                    Button {
+                        selectedTab = 0
+                        push.openNotificationID = banner.id
+                        push.foregroundBanner = nil
+                    } label: { Label(banner.title, systemImage: "bubble.left.fill") }
+                    Spacer()
+                    Button { push.foregroundBanner = nil } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Dismiss lead notice")
+                }
+                .font(.subheadline).padding(12).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal).padding(.top, 8)
+            }
+        }
+        .onChange(of: push.refreshID) { _, _ in
+            if let workerService, model.businesses.contains(where: { $0.member_role == "worker" }) {
+                Task { await push.refreshAlerts(service: workerService) }
+            }
+        }
+        .task(id: "\(scenePhase)-\(model.businesses.filter { $0.member_role == "worker" }.map(\.id))") {
+            guard scenePhase == .active, let workerService,
+                  model.businesses.contains(where: { $0.member_role == "worker" }) else { return }
+            repeat {
+                await push.refreshAlerts(service: workerService)
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            } while !Task.isCancelled
+        }
+        .onChange(of: model.businesses.map { $0.member_role }) { _, roles in
+            if !roles.contains("worker") { push.unread = 0; push.foregroundBanner = nil }
+        }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             repeat {
@@ -51,6 +91,8 @@ struct BusinessAccessView: View {
                 }
             } else if model.isOwner {
                 businessList
+            } else if let workerService, model.businesses.contains(where: { $0.member_role == "worker" }) {
+                WorkerInboxView(businesses: model.businesses.filter { $0.member_role == "worker" }, service: workerService)
             } else if model.businesses.count > 1 {
                 businessList
             } else if let business = model.businesses.first {
@@ -58,10 +100,17 @@ struct BusinessAccessView: View {
             } else if let application = model.application {
                 applicationStatus(application)
             } else {
-                BusinessApplicationForm(model: model)
+                VStack {
+                    if let workerService {
+                        NavigationLink("Accept worker invitation") {
+                            AcceptWorkerInvitationView(service: workerService, accepted: { await model.load() })
+                        }.padding()
+                    }
+                    BusinessApplicationForm(model: model)
+                }
             }
         }
-        .navigationTitle(model.isOwner ? "Your businesses" : "CrewCrate")
+        .navigationTitle(model.isOwner ? "Your businesses" : model.businesses.contains(where: { $0.member_role == "worker" }) ? "Incoming leads" : "CrewCrate")
         .toolbar { refreshButton }
     }
 
@@ -158,7 +207,8 @@ struct BusinessAccessView: View {
     }
 
     private var account: some View {
-        CrewCrateAccountView(isOwner: model.isOwner, businesses: model.businesses, service: profileService)
+        CrewCrateAccountView(isOwner: model.isOwner, businesses: model.businesses, service: profileService,
+            workerService: workerService, campaignService: campaignService, accepted: { await model.load() })
     }
 
     private var refreshButton: some ToolbarContent {
@@ -260,17 +310,39 @@ private struct CrewCrateAccountView: View {
     let isOwner: Bool
     let businesses: [BusinessSummary]
     let service: any BusinessProfileServicing
+    let workerService: (any WorkerServicing)?
+    let campaignService: any CampaignWorkspaceServicing & WorkspaceContactServicing
+    let accepted: @MainActor () async -> Void
     @Environment(AuthenticationViewModel.self) private var authentication
     @State private var confirmingLogout = false
 
     var body: some View {
         Form {
             Section("Your account") {
-                Label(isOwner ? "Platform owner" : "Business account", systemImage: "person.crop.circle")
+                Label(isOwner ? "Platform owner" : businesses.contains(where: { $0.member_role == "worker" }) ? "Worker account" : "Business account", systemImage: "person.crop.circle")
             }
-            if !isOwner && !businesses.isEmpty {
+            if !isOwner, let workerService {
+                Section("Your team") {
+                    NavigationLink("Accept worker invitation") {
+                        AcceptWorkerInvitationView(service: workerService, accepted: accepted)
+                    }
+                    ForEach(businesses.filter { $0.member_role == "admin" }) { business in
+                        NavigationLink("Manage \(business.name) team") {
+                            WorkerTeamView(business: business, service: workerService)
+                        }
+                    }
+                }
+            }
+            if !isOwner && businesses.contains(where: { $0.member_role != "worker" }) {
+                Section("Business workspaces") {
+                    ForEach(businesses.filter { $0.member_role == "admin" }) { business in
+                        NavigationLink(business.name) {
+                            CampaignWorkspaceView(business: business, service: campaignService)
+                        }
+                    }
+                }
                 Section("Business information") {
-                    ForEach(businesses) { business in
+                    ForEach(businesses.filter { $0.member_role != "worker" }) { business in
                         NavigationLink(business.name) {
                             BusinessProfileEditorView(business: business, service: service)
                         }

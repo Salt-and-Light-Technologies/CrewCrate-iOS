@@ -46,10 +46,14 @@ final class BusinessAccessViewModel {
                 catch { self.error = message(error) }
             } else {
                 let request = try await service.application()
-                if let request, request.status != "approved" {
+                let memberships = try await service.businesses().filter { $0.access_approved == true }
+                let workerMemberships = memberships.filter { $0.member_role == "worker" }
+                if !workerMemberships.isEmpty {
+                    businesses = memberships
+                } else if let request, request.status != "approved" {
                     businesses = []
                 } else {
-                    businesses = try await service.businesses().filter { $0.access_approved == true }
+                    businesses = memberships
                 }
                 application = request
             }

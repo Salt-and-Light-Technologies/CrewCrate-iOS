@@ -4,11 +4,13 @@ struct CreateAccountView: View {
     @Environment(AuthenticationViewModel.self) private var viewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showingBusinessQuestions = false
+    @State private var isWorker = false
 
     var body: some View {
         @Bindable var viewModel = viewModel
-        AuthenticationLayout(title: "Create your account", subtitle: "Step 1 of 2 · Your login details") {
+        AuthenticationLayout(title: "Create your account", subtitle: isWorker ? "Join your business team" : "Step 1 of 2 · Your login details") {
             VStack(spacing: 20) {
+                Toggle("I have a worker invitation", isOn: $isWorker)
                 AuthenticationField(label: "Email") {
                     TextField("you@company.com", text: $viewModel.email)
                         .textContentType(.username)
@@ -26,9 +28,15 @@ struct CreateAccountView: View {
                         .submitLabel(.next)
                         .onSubmit { continueSignup() }
                 }
-                Text("Next, tell us about your business. Your account won’t be created yet.")
+                Text(isWorker ? "Create your own login, verify your email, then sign in and enter your invitation code. Use the email your business invited." : "Next, tell us about your business. Your account won’t be created yet.")
                     .font(.footnote).foregroundStyle(.secondary)
-                Button("Continue") { continueSignup() }
+                Button(isWorker ? "Create worker account" : "Continue") {
+                    if isWorker { Task { await viewModel.createWorkerAccount() } }
+                    else { continueSignup() }
+                }
+                if isWorker && viewModel.signupComplete {
+                    Text("Account request completed. Check your email for verification, then log in to accept your invitation.").foregroundStyle(.secondary)
+                }
                     .buttonStyle(AuthenticationButtonStyle())
                 Button("Already have an account? Log in") { dismiss() }
                     .font(.subheadline.weight(.semibold))

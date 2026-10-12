@@ -23,6 +23,10 @@ struct ContentView: View {
             }
         }
         .environment(viewModel)
+        .environment(WorkerPushState.shared)
+        .onChange(of: viewModel.identity?.userID) { _, userID in
+            if userID != nil { WorkerPushState.shared.activate() }
+        }
         .task { await viewModel.restore() }
         .onOpenURL { url in Task { await viewModel.handleCallback(url) } }
         .alert("CrewCrate", isPresented: Binding(get: { viewModel.notice != nil }, set: { if !$0 { viewModel.notice = nil } })) {

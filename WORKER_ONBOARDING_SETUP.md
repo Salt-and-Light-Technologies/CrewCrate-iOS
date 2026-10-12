@@ -1,0 +1,19 @@
+# Worker onboarding and alerts
+
+This phase adds Observation/MVVM worker signup, invitation acceptance, business-admin team management, an incoming-leads landing view, internal follow-up notes and worker alerts. SwiftUI remains the UI framework. UIKit is limited to required APNs registration and notification delegate callbacks.
+
+Business administrator: Account → Manage business team → enter the invited worker email → Create invitation → share the seven-day code. ShareLink prepares content; the user chooses whether/how to send it. Codes are returned once, so create a new invitation if one is lost. Rotation revokes older unused codes for that recipient/business. Team controls revoke pending invitations or remove active workers.
+
+New worker: Create account → I have a worker invitation → enter that invited email and their own password → Create worker account → verify email → log in → Accept worker invitation → enter name/code. Existing accounts can accept from Account. There are no business questions or business-application submission in worker signup. Supabase verification and backend invitation authorization are separate checks.
+
+Workers land on Incoming leads, with an explicit business selector when they belong to multiple teams. Alerts may open conversations in any of their active worker businesses. Users who also administer a business can still open its campaign workspace from Account. Worker team and business-profile controls are hidden; the backend enforces restrictions independently.
+
+The existing conversation API stores manual tracking records. The inbox labels this truthfully, shows contact details and revision-ordered internal notes, and supports recording follow-up or closing a record. Notes do not send SMS. Actual incoming customer SMS, SMS replies, takeover ownership and calendar booking remain outside this implementation.
+
+All active workers in a business receive server-persisted unread alerts on interested/handoff transitions. Foreground polling and APNs arrivals refresh a small silent notice; notice/alert buttons open the conversation. The tab and alert list show unread count. Opening a conversation marks its alerts read. Background/closed uses ordinary APNs alert/sound/badge and respects device settings. Enable device notifications requests permission only on explicit user action; permission denial leaves the in-app inbox available.
+
+`WorkerNotifications.entitlements` and the target Push Notifications capability are configured. Debug maps to development/sandbox; Release maps to production. Apple must enable the bundle's capability and provide valid signing/provisioning. APNs server secrets and a background queue consumer are also required. See [backend rollout](../CrewCrate-Backend/WORKER_ONBOARDING_SETUP.md). No live push or new provisioning was validated. Notification taps resolve against authenticated server alerts rather than trusting payload business IDs. Logout removes the current token registration before clearing authentication.
+
+Validation: standalone macOS `Tests/WorkerChecks.swift`, existing BusinessAccessChecks and SignupChecks pass with injected fakes. New checks cover worker signup without business metadata, acceptance, worker landing despite an older pending application, unread/new-alert behavior, read state and revision-aware follow-up. All current Swift sources pass syntax parsing. The Xcode project and entitlements pass plist validation. No full iOS app/Xcode build or device UI test was run; layout, navigation, provisioning and APNs lifecycle checks remain manual.
+
+For the standalone checks, compile Models, Services (excluding UIKit-based WorkerPushState), ViewModels and Configuration/LiveConfiguration.swift together with one Tests/*Checks.swift entry point using Swift 6, then run the output. Observation compiler macros require the local compiler-plugin process to execute. These checks contact no external services.

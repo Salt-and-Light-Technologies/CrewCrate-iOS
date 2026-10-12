@@ -56,6 +56,11 @@ final class AuthenticationViewModel {
 
     func signOut() async {
         await perform {
+            #if canImport(UIKit)
+            if let workers = self.service as? any WorkerServicing {
+                try await WorkerPushState.shared.signOut(service: workers)
+            }
+            #endif
             self.identity = nil
             self.needsPasswordUpdate = false
             self.password = ""; self.confirmPassword = ""
@@ -124,6 +129,17 @@ final class AuthenticationViewModel {
             let signedIn = try await self.service.signUp(email: self.normalizedEmail, password: self.password, business: self.signupBusiness)
             self.password = ""; self.confirmPassword = ""
             self.signupBusiness = BusinessApplicationDraft()
+            self.signupNeedsEmailConfirmation = !signedIn
+            self.signupComplete = true
+            if signedIn { self.identity = try await self.service.identity() }
+        }
+    }
+
+    func createWorkerAccount() async {
+        guard validateAccountDetails() else { return }
+        await perform {
+            let signedIn = try await self.service.signUp(email: self.normalizedEmail, password: self.password)
+            self.password = ""; self.confirmPassword = ""
             self.signupNeedsEmailConfirmation = !signedIn
             self.signupComplete = true
             if signedIn { self.identity = try await self.service.identity() }

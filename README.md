@@ -1,5 +1,18 @@
 # CrewCrate iOS
 
+## Worker onboarding and alerts — current addition
+
+Business administrators can create and share expiring worker invitation codes from
+Account → Manage business team. Workers create their own accounts without business
+questions, verify the invited email and accept their code. Active worker membership
+opens Incoming leads first, with contact details and internal follow-up notes; business
+administration remains restricted by the backend. All active workers receive durable
+alerts on interested/handoff record transitions, with a silent foreground notice/unread
+badge and APNs registration/tap support. Current conversations are labeled manual
+tracking; these notes do not send SMS. APNs delivery requires Apple setup and a deployed
+consumer, and has not been exercised live. See WORKER_ONBOARDING_SETUP.md for rollout
+and local validation. No iOS build, live migration or deployment was performed.
+
 ## Platform-owner business analytics
 
 The platform owner opens a separate read-only analytics view when selecting a business.
@@ -54,8 +67,8 @@ settings and retains request IDs for turn retries. Saved campaigns expose pagina
 contact review and opt-out recording. Account opens business information editing;
 calendar connections remain explicitly unconnected. See IOS_WORKFLOW_SETUP.md.
 
-Worker assignments/inbox, Twilio delivery, national registry screening, calendar booking,
-financial tracking and invitations are not enabled yet. No live outreach can start.
+Campaign-specific worker assignments, Twilio delivery, national registry screening,
+calendar booking and financial tracking are not enabled yet. No live outreach can start.
 
 Tests/BusinessAccessChecks.swift exercises approval UI state and owner-login authorization
 with injected fakes as a standalone macOS executable, not an iOS build. SwiftUI sources

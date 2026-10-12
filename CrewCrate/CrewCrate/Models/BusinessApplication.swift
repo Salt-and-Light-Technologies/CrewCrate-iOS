@@ -39,4 +39,5 @@ nonisolated struct BusinessSummary: Decodable, Identifiable, Sendable {
     let revision: Int
     var onboarding: BusinessProfileFields? = nil
     var access_approved: Bool? = nil
+    var member_role: String? = nil
 }

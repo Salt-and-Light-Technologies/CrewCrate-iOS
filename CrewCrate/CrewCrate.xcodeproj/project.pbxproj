@@ -82,6 +82,7 @@
 				TargetAttributes = {
 					A8D53F523050341300AECEEB = {
 						CreatedOnToolsVersion = 26.6;
+						SystemCapabilities = { com.apple.Push = { enabled = 1; }; };
 					};
 				};
 			};
@@ -251,9 +252,11 @@
 		A8D53F5F3050341500AECEEB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APNS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = WorkerNotifications.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8D2FD8V8N3;
 				ENABLE_PREVIEWS = YES;
@@ -290,9 +293,11 @@
 		A8D53F603050341500AECEEB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APNS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = WorkerNotifications.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8D2FD8V8N3;
 				ENABLE_PREVIEWS = YES;
