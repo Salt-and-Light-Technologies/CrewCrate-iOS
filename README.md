@@ -1,5 +1,58 @@
 # CrewCrate iOS
 
+## Two-step signup
+
+Business login now checks the application first. Pending/denied applicants cannot open
+business screens, and a membership is usable only with an explicit server approval flag.
+Missing approval fields from an older backend do not grant access. Signup completion
+states that approval is required. See ../CrewCrate-Backend/BUSINESS_APPROVAL_FIX.md;
+the additional gate migration/backend deployment is required for live behavior.
+
+CreateAccountView now validates login details locally and navigates to SignupBusinessView
+without creating an authentication user. The second screen collects business name,
+contact name/phone and optional referral; its Create account button performs signup.
+Business details are staged in Supabase signup metadata (never the password) so they
+survive email confirmation and another device. After verified login, an unassigned user
+with no existing application submits that draft through the authenticated application
+endpoint. This grants no business access until owner approval. Existing users without
+signup metadata can still complete the signed-in application form.
+
+Standalone Tests/SignupChecks.swift passes for no signup before business completion,
+metadata request payloads and application recovery. No live signup or iOS build was run.
+The selected platform-owner email and secure setup SQL are documented in
+../CrewCrate-Backend/PLATFORM_OWNER_SETUP.md; no credentials are embedded in the app.
+
+## Current implementation — business access foundation
+
+The signed-in placeholder is now replaced by an Observation/MVVM business-access flow.
+Unassigned users complete a short business/contact/referral application and see a pending
+or denied state. Verified platform owners see Businesses, Requests and Account; Requests
+supports approve/deny with revision checks. Approved businesses see a simple three-step
+recovery overview. Platform-owner sign-in is selectable on Login and verified by the
+backend; the toggle does not grant privileges. Request lists refresh while the app is
+active and retain pending requests on the backend. No push notification delivery exists.
+
+Deploy the business-application backend migration/endpoints before using these screens.
+See ../CrewCrate-Backend/BUSINESS_ACCESS_SETUP.md.
+
+Approved businesses now open a campaign list with a three-step draft editor: offer,
+assistant and contacts. The editor supports ten assistant names, writing-style presets,
+custom instructions, draft editing, CSV/TSV/XLSX upload, worksheet selection, mapping,
+preview and atomic campaign/import saving. AI practice uses a snapshot of the editor's
+settings and retains request IDs for turn retries. Saved campaigns expose paginated
+contact review and opt-out recording. Account opens business information editing;
+calendar connections remain explicitly unconnected. See IOS_WORKFLOW_SETUP.md.
+
+Worker assignments/inbox, Twilio delivery, national registry screening, calendar booking,
+financial tracking and invitations are not enabled yet. No live outreach can start.
+
+Tests/BusinessAccessChecks.swift exercises approval UI state and owner-login authorization
+with injected fakes as a standalone macOS executable, not an iOS build. SwiftUI sources
+were syntax-parsed; on-device layout/navigation remains for the user's manual checks.
+Tests/CampaignWorkspaceChecks.swift adds mocked editing/import/retry/permission and
+HTTP-contract checks. The historical sections below describe earlier implementations;
+consult the current sections and active source for present behavior.
+
 Reset to a minimal SwiftUI starter application on October 11, 2026 at the user's request.
 
 The app opens a login screen with CrateMark, email and password fields, and links to account creation and password recovery. Forms connect to the existing Supabase project for password login, signup, recovery emails and password updates. Keychain stores sessions; refresh tokens renew expired access tokens. The API verifies login through GET /v1/me. Signed-in users start on Campaigns, with an Account tab. Campaigns load from assigned backend workspaces; the plus button opens a full-screen form and saves campaign details as a server draft. All asset catalog files, images, the existing purple CrateMark launch screen, bundle identity and Xcode project settings are preserved.
