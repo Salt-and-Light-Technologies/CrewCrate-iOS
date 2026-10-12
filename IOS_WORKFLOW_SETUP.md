@@ -260,3 +260,49 @@ custom names are supported, not silently migrated or hidden behind an unrelated 
 Standalone Swift checks verify replacing an old name, saving the selected one and
 nil/blank fallback. Backend tests verify context/selected opening identity. No iOS app
 build, deployment or live model/outreach requests were performed.
+
+## Delete campaigns from the business list
+
+Swipe a campaign row left → Delete, or long-press → Delete campaign. Full-swipe deletion
+is disabled. Both actions open a confirmation naming the campaign and explaining that
+its tracking/history/practice sessions are removed while business contacts, permissions,
+opt-outs and import audit rows are retained. Cancel performs no request. Administrator-held
+campaigns have no delete action; the backend independently rejects deletion while held.
+
+The shared list view model sends authenticated DELETE with the displayed campaign revision.
+It prevents simultaneous refresh/delete operations, shows progress, removes the row only
+on confirmed HTTP 204 and retains other rows. Failures keep the row and expose an error;
+use Try again to refresh before reconfirming a stale or uncertain deletion. The service
+accepts an empty 204 response without trying to decode it as JSON. No automatic retries.
+
+This uses the pre-existing backend delete route, with tenant membership/owner checks,
+partner/campaign row locks and revision validation. Campaign-specific conversations,
+conversation events, saved campaign-linked AI tests and campaign events are deleted in
+one transaction; a partner-level deletion event records name/ID. Business lead records,
+suppression preferences and source import rows remain untouched. Existing owner access
+is preserved. Paused/archived/planning campaigns can be deleted unless on owner hold.
+No live delivery or scheduler exists to cancel; cancellation of external jobs would
+need to be designed before live delivery is enabled. No migration is added for deletion.
+
+Validation: 126 backend tests pass (including authenticated access, stale revisions,
+holds, related-row cleanup and preservation of contacts/opt-outs/imports/other campaigns).
+Standalone Swift list checks pass for failure retention, success removal, refresh and
+DELETE bearer/revision/204 handling. SwiftUI syntax parsing, Ruff and diff checks pass.
+No real campaign was deleted, no iOS app build was run, and nothing was deployed.
+On-device validation remains: swipe/long-press, named confirmation/Cancel, progress,
+VoiceOver, empty-list state and errors with a stale revision or interrupted connection.
+
+Review then stage this follow-up with the previous authorized uncommitted changes:
+
+```sh
+cd /Users/jamesmcdougall/Desktop/Dev/SaltAndLight/CrewCrate/CrewCrate-iOS
+git add CrewCrate/CrewCrate/Views/CampaignWorkspaceView.swift CrewCrate/CrewCrate/ViewModels/CampaignWorkspaceViewModel.swift CrewCrate/CrewCrate/Services/CampaignWorkspaceServicing.swift Tests/CampaignWorkspaceChecks.swift IOS_WORKFLOW_SETUP.md
+git diff --cached
+git commit -m "Add confirmed campaign deletion from the business list"
+git push origin HEAD
+cd ../CrewCrate-Backend
+git add app/deletion.py tests/test_campaign_deletion.py README.md
+git diff --cached
+git commit -m "Verify scoped campaign deletion and retained contact suppression"
+git push origin HEAD
+```

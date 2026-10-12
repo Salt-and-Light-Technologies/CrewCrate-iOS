@@ -5,6 +5,7 @@ import Observation
 @Observable
 final class CampaignWorkspaceViewModel {
     var campaigns: [WorkspaceCampaign] = []
+    var deletingCampaignID: UUID?
     var isLoading = false
     var hasLoaded = false
     var error: String?
@@ -17,7 +18,7 @@ final class CampaignWorkspaceViewModel {
         contactService = service
     }
     func load() async {
-        guard !isLoading else { return }
+        guard !isLoading, deletingCampaignID == nil else { return }
         isLoading = true
         defer { isLoading = false }
         do {
@@ -26,6 +27,22 @@ final class CampaignWorkspaceViewModel {
             error = nil
         } catch is CancellationError { }
         catch { self.error = error.localizedDescription }
+    }
+    func delete(_ campaign: WorkspaceCampaign) async {
+        guard !isLoading, deletingCampaignID == nil, !campaign.owner_hold else { return }
+        deletingCampaignID = campaign.id
+        error = nil
+        defer { deletingCampaignID = nil }
+        do {
+            try await service.deleteCampaign(business: business.id, campaign: campaign.id, revision: campaign.revision)
+            campaigns.removeAll { $0.id == campaign.id }
+        } catch {
+            if let apiError = error as? CrewCrateAPIError {
+                self.error = apiError.localizedDescription
+            } else {
+                self.error = "Couldn’t confirm deletion. Refresh the campaign list before trying again; the campaign may already have been deleted."
+            }
+        }
     }
     func replace(_ saved: WorkspaceCampaign) {
         campaigns.removeAll { $0.id == saved.id }

@@ -2,6 +2,7 @@ import Foundation
 
 nonisolated protocol CampaignWorkspaceServicing: Sendable {
     func campaigns(business: UUID) async throws -> [WorkspaceCampaign]
+    func deleteCampaign(business: UUID, campaign: UUID, revision: Int) async throws
     func campaign(business: UUID, id: UUID) async throws -> WorkspaceCampaign
     func saveCampaign(business: UUID, original: WorkspaceCampaign?, settings: CampaignSettings) async throws -> WorkspaceCampaign
     func startPractice(business: UUID, settings: CampaignSettings) async throws -> PracticeConversation
@@ -25,6 +26,21 @@ extension SupabaseSession: CampaignWorkspaceServicing {
             if page.count < 100 { return result }
             offset += page.count
             try Task.checkCancellation()
+        }
+    }
+    func deleteCampaign(business: UUID, campaign: UUID, revision: Int) async throws {
+        let url = LiveConfiguration.apiURL.appendingPathComponent("v1/partners/\(business)/campaigns/\(campaign)")
+            .appending(queryItems: [URLQueryItem(name: "expected_revision", value: String(revision))])
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 30
+        request.setValue("Bearer " + (try await accessToken()), forHTTPHeaderField: "Authorization")
+        let (data, response) = try await sendAPIRequest(request)
+        guard response.statusCode == 204 else {
+            struct Failure: Decodable { let detail: String }
+            let detail = (try? JSONDecoder().decode(Failure.self, from: data))?.detail
+            let message = detail ?? "Couldn’t delete the campaign (HTTP \(response.statusCode)). Refresh the list before trying again."
+            throw CrewCrateAPIError(status: response.statusCode, message: message)
         }
     }
     func campaign(business: UUID, id: UUID) async throws -> WorkspaceCampaign {

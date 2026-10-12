@@ -6,15 +6,28 @@ nonisolated private func sampleCampaign(_ settings: CampaignSettings, business: 
         owner_hold: false, messaging_connected: false, sending_enabled: false)
 }
 
-private actor WorkspaceFake: CampaignWorkspaceServicing {
+private actor WorkspaceFake: CampaignWorkspaceServicing, WorkspaceContactServicing {
     let business: UUID
     var failSave = false
     var failReply = true
     var attempts: [UUID] = []
     var savedSettings: CampaignSettings?
+    var listedCampaigns: [WorkspaceCampaign] = []
+    var failDelete = false
+    var deletionRequests: [UUID] = []
     let conversationID = UUID()
     init(business: UUID) { self.business = business }
-    func campaigns(business: UUID) async throws -> [WorkspaceCampaign] { [] }
+    func campaigns(business: UUID) async throws -> [WorkspaceCampaign] { listedCampaigns }
+    func setCampaigns(_ campaigns: [WorkspaceCampaign]) { listedCampaigns = campaigns }
+    func setDeleteFailure(_ failing: Bool) { failDelete = failing }
+    func deleteCampaign(business: UUID, campaign: UUID, revision: Int) async throws {
+        precondition(business == self.business && revision == 3)
+        deletionRequests.append(campaign)
+        if failDelete { throw URLError(.timedOut) }
+        listedCampaigns.removeAll { $0.id == campaign }
+    }
+    func contacts(business: UUID, campaign: UUID, search: String, offset: Int) async throws -> [WorkspaceContact] { [] }
+    func reviewContact(business: UUID, contact: WorkspaceContact, fields: ContactReviewFields) async throws -> WorkspaceContact { contact }
     func campaign(business: UUID, id: UUID) async throws -> WorkspaceCampaign {
         var settings = CampaignSettings(); settings.name = "Server version"
         return sampleCampaign(settings, business: business)
@@ -71,10 +84,11 @@ nonisolated private struct SessionStoreFake: AuthSessionStore {
 private actor TransportFake: LeadHTTPTransport {
     var requests: [URLRequest] = []
     let response: Data
-    init(response: Data) { self.response = response }
+    let status: Int
+    init(response: Data, status: Int = 200) { self.response = response; self.status = status }
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         requests.append(request)
-        return (response, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        return (response, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
     }
 }
 
@@ -99,6 +113,30 @@ struct CampaignWorkspaceChecks {
             from: JSONSerialization.data(withJSONObject: legacyJSON))
         precondition(legacyPlan.start_date == nil && legacyPlan.end_date == nil)
         let original = sampleCampaign(originalSettings, business: business.id)
+        let listService = WorkspaceFake(business: business.id)
+        let otherCampaign = sampleCampaign(originalSettings, business: business.id)
+        await listService.setCampaigns([original, otherCampaign])
+        let list = CampaignWorkspaceViewModel(business: business, service: listService)
+        await list.load()
+        await listService.setDeleteFailure(true)
+        await list.delete(original)
+        precondition(list.campaigns.count == 2 && list.error != nil && list.deletingCampaignID == nil)
+        await listService.setDeleteFailure(false)
+        await list.delete(original)
+        precondition(list.campaigns.count == 1 && list.campaigns[0].id == otherCampaign.id)
+        precondition(list.error == nil && list.deletingCampaignID == nil)
+        await list.load()
+        precondition(list.campaigns.count == 1)
+        let deleteTransport = TransportFake(response: Data(), status: 204)
+        let deleteSession = SupabaseSession(store: SessionStoreFake(session: AuthSession(accessToken: "test-token",
+            refreshToken: "test-refresh", expiresAt: Date().addingTimeInterval(3600), userID: UUID())), transport: deleteTransport)
+        _ = try await deleteSession.restore()
+        try await deleteSession.deleteCampaign(business: business.id, campaign: original.id, revision: original.revision)
+        let deleteRequest = await deleteTransport.requests[0]
+        precondition(deleteRequest.httpMethod == "DELETE")
+        precondition(deleteRequest.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
+        precondition(deleteRequest.url!.path.hasSuffix("/campaigns/\(original.id)"))
+        precondition(deleteRequest.url!.query!.contains("expected_revision=3"))
         let editor = CampaignEditorModel(business: business, original: original, service: service, reader: ReaderFake())
         editor.settings.ai_name = "Old custom name"
         precondition(editor.designatedAIName == "Old custom name")

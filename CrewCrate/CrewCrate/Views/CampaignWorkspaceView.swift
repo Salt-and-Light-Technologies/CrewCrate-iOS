@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 struct CampaignWorkspaceView: View {
     @State private var model: CampaignWorkspaceViewModel
     @State private var creatingCampaign = false
+    @State private var campaignToDelete: WorkspaceCampaign?
+    @State private var confirmingDeletion = false
     init(business: BusinessSummary, service: any CampaignWorkspaceServicing & WorkspaceContactServicing) {
         _model = State(initialValue: CampaignWorkspaceViewModel(business: business, service: service))
     }
@@ -20,9 +22,10 @@ struct CampaignWorkspaceView: View {
                     Label("Create a campaign", systemImage: "plus").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(AuthenticationButtonStyle())
-                .disabled(model.business.status == "paused")
+                .disabled(model.business.status == "paused" || model.deletingCampaignID != nil)
             }
             Section("Your campaigns") {
+                if model.deletingCampaignID != nil { ProgressView("Deleting campaign…") }
                 if model.isLoading && !model.hasLoaded { ProgressView("Loading campaigns…") }
                 if model.hasLoaded && model.campaigns.isEmpty {
                     Text("Start with one offer. Your saved campaigns will appear here.").foregroundStyle(.secondary)
@@ -43,6 +46,23 @@ struct CampaignWorkspaceView: View {
                             }.font(.caption).foregroundStyle(.secondary)
                         }.padding(.vertical, 8)
                     }
+                    .disabled(model.deletingCampaignID != nil)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !campaign.owner_hold {
+                            Button(role: .destructive) {
+                                campaignToDelete = campaign; confirmingDeletion = true
+                            } label: { Label("Delete", systemImage: "trash") }
+                            .disabled(model.isLoading || model.deletingCampaignID != nil)
+                        }
+                    }
+                    .contextMenu {
+                        if !campaign.owner_hold {
+                            Button(role: .destructive) {
+                                campaignToDelete = campaign; confirmingDeletion = true
+                            } label: { Label("Delete campaign", systemImage: "trash") }
+                            .disabled(model.isLoading || model.deletingCampaignID != nil)
+                        }
+                    }
                 }
                 if let error = model.error {
                     Text(error).foregroundStyle(.red)
@@ -55,6 +75,18 @@ struct CampaignWorkspaceView: View {
                 Text("You can save drafts and practice. No customers are contacted.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+        }
+        .confirmationDialog("Delete \(campaignToDelete?.config.name ?? "campaign")?",
+                            isPresented: $confirmingDeletion, titleVisibility: .visible) {
+            if let campaign = campaignToDelete {
+                Button("Delete campaign", role: .destructive) {
+                    Task { await model.delete(campaign) }
+                    campaignToDelete = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { campaignToDelete = nil }
+        } message: {
+            Text("This permanently deletes the campaign, its tracking history and saved practice conversations. Business contacts, permission records and opt-outs are kept.")
         }
         .navigationTitle("Campaigns")
         .task { await model.load() }
