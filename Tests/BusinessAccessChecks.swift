@@ -19,10 +19,18 @@ private actor ApplicationServiceFake: BusinessApplicationServicing {
     var rows: [BusinessSummary] = []
     var pending: [BusinessApplication] = []
     var failDecision = false
+    var failBusinesses = false
+    var failRequests = false
 
     func application() async throws -> BusinessApplication? { current }
-    func businesses() async throws -> [BusinessSummary] { rows }
-    func pendingApplications() async throws -> [BusinessApplication] { pending }
+    func businesses() async throws -> [BusinessSummary] {
+        if failBusinesses { throw CrewCrateAPIError(status: 500, message: "Business list failed") }
+        return rows
+    }
+    func pendingApplications() async throws -> [BusinessApplication] {
+        if failRequests { throw CrewCrateAPIError(status: 500, message: "Request list failed") }
+        return pending
+    }
     func submitApplication(_ draft: BusinessApplicationDraft) async throws -> BusinessApplication {
         let result = makeApplication(draft: draft)
         current = result
@@ -46,6 +54,21 @@ private actor ApplicationServiceFake: BusinessApplicationServicing {
     }
     func addApprovedLookingMembership() {
         rows = [BusinessSummary(id: UUID(), name: "Legacy business", status: "draft", revision: 0, access_approved: true)]
+    }
+    func setLoadFailures(businesses: Bool, requests: Bool) {
+        failBusinesses = businesses; failRequests = requests
+    }
+}
+
+nonisolated private struct InboxSessionStore: AuthSessionStore {
+    let session: AuthSession
+    func load() throws -> AuthSession? { session }
+    func save(_ session: AuthSession) throws { }
+    func clear() throws { }
+}
+private actor InboxFailureTransport: LeadHTTPTransport {
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        (Data("Internal Server Error".utf8), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
     }
 }
 
@@ -73,6 +96,18 @@ struct BusinessAccessChecks {
         await service.addApprovedLookingMembership()
         await applicant.load()
         precondition(applicant.application?.status == "pending" && applicant.businesses.isEmpty)
+        await service.setLoadFailures(businesses: true, requests: false)
+        let independentInbox = BusinessAccessViewModel(isOwner: true, service: service)
+        await independentInbox.load()
+        precondition(independentInbox.requests.count == 1 && independentInbox.hasLoadedRequests)
+        precondition(independentInbox.requestsError == nil && independentInbox.error != nil)
+        await service.setLoadFailures(businesses: false, requests: true)
+        let independentBusinesses = BusinessAccessViewModel(isOwner: true, service: service)
+        await independentBusinesses.load()
+        precondition(independentBusinesses.businesses.count == 1 && independentBusinesses.hasLoaded)
+        precondition(independentBusinesses.requestsError != nil && independentBusinesses.error == nil)
+        precondition(!independentBusinesses.hasLoadedRequests)
+        await service.setLoadFailures(businesses: false, requests: false)
         let owner = BusinessAccessViewModel(isOwner: true, service: service)
         await owner.load()
         precondition(owner.requests.count == 1)
@@ -103,6 +138,15 @@ struct BusinessAccessChecks {
         ownerLogin.signingInAsOwner = true
         await ownerLogin.login()
         precondition(ownerLogin.identity?.isOwner == true)
+        let inboxSession = SupabaseSession(store: InboxSessionStore(session: AuthSession(accessToken: "test-token",
+            refreshToken: "test-refresh", expiresAt: Date().addingTimeInterval(3600), userID: UUID())), transport: InboxFailureTransport())
+        _ = try await inboxSession.restore()
+        do {
+            _ = try await inboxSession.pendingApplications()
+            preconditionFailure("Expected server error")
+        } catch let failure as CrewCrateAPIError {
+            precondition(failure.status == 500 && failure.message.contains("HTTP 500") && failure.message.contains("business requests"))
+        }
         print("Business application state checks passed.")
     }
 }

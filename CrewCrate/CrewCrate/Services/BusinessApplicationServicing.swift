@@ -93,7 +93,16 @@ extension SupabaseSession: BusinessApplicationServicing {
         let (data, response) = try await sendAPIRequest(request)
         guard (200...299).contains(response.statusCode) else {
             let detail = (try? JSONDecoder().decode(BusinessAPIFailure.self, from: data))?.detail
-            throw CrewCrateAPIError(status: response.statusCode, message: detail ?? "Couldn’t load this information. Please try again.")
+            let resource = path.contains("owner/applications") ? "business requests" : "business information"
+            let fallback: String
+            switch response.statusCode {
+            case 401: fallback = "Your session has expired. Log out and sign in again."
+            case 403: fallback = "This account does not have permission to load \(resource)."
+            case 404: fallback = "The deployed backend does not provide this feature. Check its deployment."
+            case 500...599: fallback = "The server couldn’t load \(resource) (HTTP \(response.statusCode)). Check the Render error log; database migrations or server configuration may need attention."
+            default: fallback = "Couldn’t load \(resource) (HTTP \(response.statusCode)). Please try again."
+            }
+            throw CrewCrateAPIError(status: response.statusCode, message: detail ?? fallback)
         }
         return try JSONDecoder().decode(T.self, from: data)
     }

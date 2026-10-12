@@ -11,6 +11,8 @@ final class BusinessAccessViewModel {
     var isLoading = true
     var isBusy = false
     var error: String?
+    var requestsError: String?
+    var hasLoadedRequests = false
     var hasLoaded = false
     let isOwner: Bool
     private let service: any BusinessApplicationServicing
@@ -29,9 +31,19 @@ final class BusinessAccessViewModel {
             if isOwner {
                 async let pending = service.pendingApplications()
                 async let existing = service.businesses()
-                let (newRequests, newBusinesses) = try await (pending, existing)
-                requests = newRequests
-                businesses = newBusinesses
+                // Inbox and business overview are independent. A broken overview must
+                // never hide successfully loaded approval requests.
+                do {
+                    requests = try await pending
+                    requestsError = nil
+                    hasLoadedRequests = true
+                } catch is CancellationError { }
+                catch { requestsError = message(error) }
+                do {
+                    businesses = try await existing
+                    hasLoaded = true
+                } catch is CancellationError { }
+                catch { self.error = message(error) }
             } else {
                 let request = try await service.application()
                 if let request, request.status != "approved" {
@@ -41,7 +53,7 @@ final class BusinessAccessViewModel {
                 }
                 application = request
             }
-            hasLoaded = true
+            if !isOwner { hasLoaded = true }
         } catch is CancellationError { }
         catch {
             if !isOwner { businesses = []; hasLoaded = false }
@@ -53,6 +65,7 @@ final class BusinessAccessViewModel {
         guard !isBusy, draft.isComplete else { return }
         isBusy = true
         error = nil
+        requestsError = nil
         defer { isBusy = false }
         do { application = try await service.submitApplication(draft) }
         catch { self.error = message(error) }
@@ -62,6 +75,7 @@ final class BusinessAccessViewModel {
         guard !isBusy else { return false }
         isBusy = true
         error = nil
+        requestsError = nil
         defer { isBusy = false }
         do {
             _ = try await service.decide(request, approve: approve, note: note)
@@ -72,7 +86,11 @@ final class BusinessAccessViewModel {
                 catch { self.error = "Request approved. Refresh to reload your business list." }
             }
             return true
-        } catch { self.error = message(error); return false }
+        } catch {
+            self.error = message(error)
+            requestsError = message(error)
+            return false
+        }
     }
 
     private func message(_ error: Error) -> String {
