@@ -34,10 +34,10 @@ struct CreateAccountView: View {
                     if isWorker { Task { await viewModel.createWorkerAccount() } }
                     else { continueSignup() }
                 }
+                .buttonStyle(AuthenticationButtonStyle())
                 if isWorker && viewModel.signupComplete {
                     Text("Account request completed. Check your email for verification, then log in to accept your invitation.").foregroundStyle(.secondary)
                 }
-                    .buttonStyle(AuthenticationButtonStyle())
                 Button("Already have an account? Log in") { dismiss() }
                     .font(.subheadline.weight(.semibold))
                     .padding(.vertical, 8)
