@@ -37,6 +37,13 @@ final class CampaignWorkspaceViewModel {
 @Observable
 final class CampaignEditorModel {
     var settings: CampaignSettings
+    // Draft text preserves incomplete/invalid edits without saving the previous number silently.
+    var dailyLimitInput: String? {
+        didSet { if let value = Self.planInteger(dailyLimitInput, in: 1...1000) { settings.daily_limit = value } }
+    }
+    var followUpInput: String? {
+        didSet { if let value = Self.planInteger(followUpInput, in: 0...3) { settings.follow_up_limit = value } }
+    }
     var step = 0
     var isBusy = false
     var error: String?
@@ -65,14 +72,106 @@ final class CampaignEditorModel {
         settings = startingSettings
         initialSettings = startingSettings
     }
+    // ai_name is the existing sole wire identity; no separate name override exists.
+    var designatedAIName: String {
+        get {
+            let name = settings.ai_name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return name.isEmpty ? "AI Assistant" : name
+        }
+        set { settings.ai_name = newValue }
+    }
     var canSave: Bool {
         !isBusy && !saveOutcomeUnknown && business.status != "paused" &&
-        (original?.isEditable ?? true) && !settings.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        (original?.isEditable ?? true) && sendingPlanError == nil && !settings.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         settings.name.count <= 160 && settings.offer.count <= 2000 && settings.qualification.count <= 2000 &&
+        (settings.ai_name?.count ?? 0) <= 100 &&
         (settings.ai_brief?.count ?? 0) <= 10000 && settings.handoff_email.count <= 320 &&
         (upload == nil || (preview != nil && previewMapping == mapping && mapping.isValid))
     }
-    var hasEdits: Bool { settings != (original?.config ?? initialSettings) || upload != nil }
+    var hasEdits: Bool {
+        settings != (original?.config ?? initialSettings) || upload != nil ||
+        dailyLimitInput != nil || followUpInput != nil
+    }
+
+    private static func planInteger(_ text: String?, in range: ClosedRange<Int>) -> Int? {
+        guard let text, !text.isEmpty, text.allSatisfy({ $0.isASCII && $0.isNumber }),
+              let value = Int(text), range.contains(value) else { return nil }
+        return value
+    }
+    var sendingPlanError: String? {
+        if (settings.start_date == nil) != (settings.end_date == nil) {
+            return "Choose both a start date and an end date."
+        }
+        if let start = settings.start_date, let end = settings.end_date,
+           start > end { return "Start date must be on or before end date." }
+        if !(1...1000).contains(settings.daily_limit) ||
+            (dailyLimitInput != nil && Self.planInteger(dailyLimitInput, in: 1...1000) == nil) {
+            return "Enter 1–1000 leads per day."
+        }
+        if followUpInput != nil && Self.planInteger(followUpInput, in: 0...3) == nil {
+            return "Enter a follow-up limit from 0 to 3."
+        }
+        let start = settings.start_hour * 60 + (settings.start_minute ?? 0)
+        let end = settings.end_hour * 60 + (settings.end_minute ?? 0)
+        if start < 540 || end > 1020 || start >= end {
+            return "Choose a start before the end, between 9 AM and 5 PM in the selected time zone."
+        }
+        return nil
+    }
+
+    // These dates represent wall-clock picker values, not scheduled instants. Using a
+    // fixed UTC day avoids device/partner time-zone shifts and daylight-saving gaps.
+    var sendingPlanCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+    var hasDateRange: Bool { settings.start_date != nil || settings.end_date != nil }
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = sendingPlanCalendar
+        formatter.timeZone = sendingPlanCalendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }
+    private var businessToday: Date {
+        let formatter = dateFormatter
+        formatter.timeZone = TimeZone(identifier: settings.time_zone) ?? sendingPlanCalendar.timeZone
+        return dateFormatter.date(from: formatter.string(from: Date()))!
+    }
+    func campaignDate(isStart: Bool) -> Date {
+        let text = isStart ? settings.start_date : settings.end_date
+        return text.flatMap { dateFormatter.date(from: $0) } ?? businessToday
+    }
+    func setDateRangeEnabled(_ enabled: Bool) {
+        if enabled {
+            let start = businessToday
+            settings.start_date = dateFormatter.string(from: start)
+            settings.end_date = dateFormatter.string(from: sendingPlanCalendar.date(byAdding: .day, value: 7, to: start)!)
+        } else { settings.start_date = nil; settings.end_date = nil }
+    }
+    func setCampaignDate(_ date: Date, isStart: Bool) {
+        if !hasDateRange { setDateRangeEnabled(true) }
+        if isStart { settings.start_date = dateFormatter.string(from: date) }
+        else { settings.end_date = dateFormatter.string(from: date) }
+    }
+
+    private func clockDate(hour: Int, minute: Int) -> Date {
+        sendingPlanCalendar.date(from: DateComponents(year: 2001, month: 1, day: 1,
+                                                      hour: hour, minute: minute))!
+    }
+    var sendingTimeRange: ClosedRange<Date> { clockDate(hour: 9, minute: 0)...clockDate(hour: 17, minute: 0) }
+    func sendingTime(isStart: Bool) -> Date {
+        clockDate(hour: isStart ? settings.start_hour : settings.end_hour,
+                  minute: (isStart ? settings.start_minute : settings.end_minute) ?? 0)
+    }
+    func setSendingTime(_ date: Date, isStart: Bool) {
+        let parts = sendingPlanCalendar.dateComponents([.hour, .minute], from: date)
+        guard let hour = parts.hour, let minute = parts.minute else { return }
+        if isStart { settings.start_hour = hour; settings.start_minute = minute }
+        else { settings.end_hour = hour; settings.end_minute = minute }
+    }
 
     func selectFile(_ url: URL) async {
         guard !isBusy else { return }
@@ -102,9 +201,16 @@ final class CampaignEditorModel {
         func match(_ names: [String]) -> String {
             info.columns.first { names.contains($0.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) } ?? ""
         }
+        func uniqueMatch(_ names: [String]) -> String {
+            let matches = info.columns.filter { names.contains($0.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)) }
+            return matches.count == 1 ? matches[0] : ""
+        }
         mapping = UploadMapping(phone: match(["phone", "phone number", "mobile", "telephone"]),
             name: match(["name", "full name", "contact name"]), email: match(["email", "email address"]),
-            sheet: info.selected_sheet ?? "")
+            sheet: info.selected_sheet ?? "",
+            permission: uniqueMatch(["sms permission", "sms_permission", "permission", "sms consent"]),
+            evidence: uniqueMatch(["permission evidence", "permission_evidence", "consent evidence", "evidence"]),
+            optout: uniqueMatch(["opted out", "opted_out", "optout", "opt out", "sms opt out"]))
     }
     func invalidatePreview() { preview = nil; previewMapping = nil }
     func removeUpload() {
@@ -138,6 +244,7 @@ final class CampaignEditorModel {
             }
             original = result
             settings = result.config
+            dailyLimitInput = nil; followUpInput = nil
             removeStagedUploadAfterSave()
             return result
         } catch {
@@ -162,6 +269,7 @@ final class CampaignEditorModel {
             let current = try await service.campaign(business: business.id, id: original.id)
             self.original = current
             settings = current.config
+            dailyLimitInput = nil; followUpInput = nil
             removeStagedUploadAfterSave()
             saveOutcomeUnknown = false
             error = nil

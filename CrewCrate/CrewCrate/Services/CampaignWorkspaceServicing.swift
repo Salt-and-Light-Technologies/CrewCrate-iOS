@@ -58,15 +58,16 @@ extension SupabaseSession: CampaignWorkspaceServicing {
             body: payload.data, contentType: payload.contentType)
     }
     func preview(business: UUID, upload: ContactUpload, mapping: UploadMapping) async throws -> UploadPreview {
-        let payload = multipart(upload: upload, fields: mappingFields(mapping))
+        let payload = multipart(upload: upload, fields: try mappingFields(mapping))
         return try await apiRequest("v1/partners/\(business)/imports/preview", method: "POST",
             body: payload.data, contentType: payload.contentType)
     }
     func saveUpload(business: UUID, original: WorkspaceCampaign?, settings: CampaignSettings,
                     upload: ContactUpload, mapping: UploadMapping, preview: UploadPreview) async throws -> WorkspaceCampaign {
-        var fields = mappingFields(mapping)
+        var fields = try mappingFields(mapping)
         fields["config"] = String(decoding: try JSONEncoder().encode(settings), as: UTF8.self)
         fields["expected_partner_revision"] = String(preview.partner_revision)
+        fields["eligible_recipients_only"] = "true"
         if let original {
             fields["campaign_id"] = original.id.uuidString
             fields["expected_revision"] = String(original.revision)
@@ -75,11 +76,17 @@ extension SupabaseSession: CampaignWorkspaceServicing {
         return try await apiRequest("v1/partners/\(business)/campaign-import", method: "POST",
             body: payload.data, contentType: payload.contentType)
     }
-    private func mappingFields(_ mapping: UploadMapping) -> [String: String] {
+    private func mappingFields(_ mapping: UploadMapping) throws -> [String: String] {
         var fields = ["phone_column": mapping.phone]
         if !mapping.name.isEmpty { fields["name_column"] = mapping.name }
         if !mapping.email.isEmpty { fields["email_column"] = mapping.email }
         if !mapping.sheet.isEmpty { fields["sheet"] = mapping.sheet }
+        var permissions: [String: String] = [:]
+        if !mapping.permission.isEmpty { permissions["permission"] = mapping.permission }
+        if !mapping.evidence.isEmpty { permissions["evidence"] = mapping.evidence }
+        if !mapping.optout.isEmpty { permissions["optout"] = mapping.optout }
+        fields["permission_columns"] = String(decoding: try JSONEncoder().encode(permissions), as: UTF8.self)
+        fields["permission_attested"] = mapping.permissionAttested ? "true" : "false"
         return fields
     }
     private func multipart(upload: ContactUpload, fields: [String: String]) -> (data: Data, contentType: String) {

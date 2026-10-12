@@ -129,7 +129,10 @@ private struct CampaignOverviewView: View {
 }
 
 struct CampaignEditorView: View {
+    private enum SendingPlanField: Hashable { case dailyLimit, followUp }
+    @FocusState private var sendingPlanFocus: SendingPlanField?
     @State private var model: CampaignEditorModel
+    @State private var eligiblePreviewOnly = true
     @State private var importing = false
     @State private var discarding = false
     @State private var reloading = false
@@ -170,7 +173,8 @@ struct CampaignEditorView: View {
                 if model.step < 2 {
                     Button("Continue") { model.step += 1 }
                         .buttonStyle(AuthenticationButtonStyle())
-                        .disabled(model.settings.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(model.settings.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  (model.step == 1 && model.sendingPlanError != nil))
                 } else {
                     Button {
                         Task { if let saved = await model.save() { onSave(saved); dismiss() } }
@@ -188,6 +192,10 @@ struct CampaignEditorView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Close") { if model.hasEdits { discarding = true } else { dismiss() } }
                     .disabled(model.isBusy)
+            }
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { sendingPlanFocus = nil }
             }
         }
         .interactiveDismissDisabled(model.hasEdits || model.isBusy)
@@ -218,8 +226,12 @@ struct CampaignEditorView: View {
             Section("Campaign details") {
                 TextField("Campaign name, e.g. Spring roof inspections", text: $model.settings.name)
                 TextField("Your offer", text: $model.settings.offer, axis: .vertical).lineLimit(3...6)
-                TextField("When is a lead ready for your team?", text: $model.settings.qualification, axis: .vertical)
+                TextField("Additional strong-response signal (optional)", text: $model.settings.qualification, axis: .vertical)
                     .lineLimit(2...5)
+                Text("Qualified leads can reach your team without this signal. If they also meet it, your team sees a strong response with the supporting evidence.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Text("Every campaign includes built-in AI behavior for your business. Your assistant identifies itself as AI.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Business contact") {
                 TextField("Contact email", text: $model.settings.handoff_email)
@@ -236,14 +248,19 @@ struct CampaignEditorView: View {
                 Text("Meet your assistant").font(.title2.bold())
                 Text("Choose a name and a writing style that fits your business.").foregroundStyle(.secondary)
             }
-            Section("Assistant name") {
-                Picker("Name", selection: Binding(get: { model.settings.ai_name ?? "Emma" }, set: { model.settings.ai_name = $0 })) {
+            Section("Designated AI") {
+                Picker("Designated AI", selection: Binding(
+                    get: { model.designatedAIName }, set: { model.designatedAIName = $0 })) {
                     ForEach(["Emma", "Olivia", "Sophia", "Ava", "Mia", "Liam", "Noah", "James", "Ethan", "Lucas"], id: \.self) { Text($0) }
-                    if let name = model.settings.ai_name,
-                       !["Emma", "Olivia", "Sophia", "Ava", "Mia", "Liam", "Noah", "James", "Ethan", "Lucas"].contains(name) {
-                        Text(name).tag(name)
+                    if !["Emma", "Olivia", "Sophia", "Ava", "Mia", "Liam", "Noah", "James", "Ethan", "Lucas"].contains(model.designatedAIName) {
+                        Text(model.designatedAIName == "AI Assistant" ? "AI Assistant" : model.designatedAIName + " (saved)")
+                            .tag(model.designatedAIName)
                     }
                 }
+            }
+            Section {
+                Text("The selected name is used by your business’s AI assistant. It always identifies itself as AI.")
+                    .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Tone and instructions") {
                 TextField("Describe how your assistant should write", text: Binding(
@@ -264,11 +281,67 @@ struct CampaignEditorView: View {
             }
             Section("Optional sending plan") {
                 DisclosureGroup("Timing and limits") {
+                    Toggle("Use a date range", isOn: Binding(
+                        get: { model.hasDateRange }, set: { model.setDateRangeEnabled($0) }))
+                    DatePicker("Start date", selection: Binding(
+                        get: { model.campaignDate(isStart: true) },
+                        set: { model.setCampaignDate($0, isStart: true) }), displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .environment(\.timeZone, model.sendingPlanCalendar.timeZone)
+                        .disabled(!model.hasDateRange)
+                    DatePicker("End date", selection: Binding(
+                        get: { model.campaignDate(isStart: false) },
+                        set: { model.setCampaignDate($0, isStart: false) }), displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .environment(\.timeZone, model.sendingPlanCalendar.timeZone)
+                        .disabled(!model.hasDateRange)
                     BusinessTimeZonePicker(selection: $model.settings.time_zone)
-                    Stepper("Start: \(String(format: "%02d:%02d", model.settings.start_hour, model.settings.start_minute ?? 0))", value: $model.settings.start_hour, in: 9...16)
-                    Stepper("End: \(String(format: "%02d:%02d", model.settings.end_hour, model.settings.end_minute ?? 0))", value: $model.settings.end_hour, in: 10...17)
-                    Stepper("Daily contacts: \(model.settings.daily_limit)", value: $model.settings.daily_limit, in: 1...100)
-                    Stepper("Follow-ups: \(model.settings.follow_up_limit)", value: $model.settings.follow_up_limit, in: 0...3)
+                    Text(model.hasDateRange
+                         ? "Both dates are included, in the business time zone. Outreach and follow-ups must stop outside this period. Daily sending is not connected yet."
+                         : "No date restriction is saved. Enable a date range to limit the campaign period.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    DatePicker("Sending starts", selection: Binding(
+                        get: { model.sendingTime(isStart: true) },
+                        set: { model.setSendingTime($0, isStart: true) }),
+                        in: model.sendingTimeRange, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                        .environment(\.timeZone, model.sendingPlanCalendar.timeZone)
+                    DatePicker("Sending ends", selection: Binding(
+                        get: { model.sendingTime(isStart: false) },
+                        set: { model.setSendingTime($0, isStart: false) }),
+                        in: model.sendingTimeRange, displayedComponents: .hourAndMinute)
+                        .datePickerStyle(.compact)
+                        .environment(\.timeZone, model.sendingPlanCalendar.timeZone)
+                    Text("Times use the selected time zone. Choose a window between 9 AM and 5 PM.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    LabeledContent("Leads contacted") {
+                        TextField("1–1000", text: Binding(
+                            get: { model.dailyLimitInput ?? String(model.settings.daily_limit) },
+                            set: { model.dailyLimitInput = $0 }))
+                            .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .frame(minWidth: 60)
+                            .accessibilityLabel("Leads contacted")
+                            .focused($sendingPlanFocus, equals: .dailyLimit)
+                    }
+                    Text("The planned daily outreach limit, not a repeat-contact count for one lead. Enter 1–1000.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    LabeledContent {
+                        TextField("0–3", text: Binding(
+                            get: { model.followUpInput ?? String(model.settings.follow_up_limit) },
+                            set: { model.followUpInput = $0 }))
+                            .keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .frame(minWidth: 60)
+                            .accessibilityLabel("Planned follow-up")
+                            .focused($sendingPlanFocus, equals: .followUp)
+                    } label: {
+                        Text("Planned follow-up")
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text("Enter 0–3 planned follow-ups. The plan stores this limit only; follow-up timing and per-lead versus campaign-wide counting are not yet defined.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if let error = model.sendingPlanError {
+                        Text(error).foregroundStyle(.red)
+                    }
                     Text("These settings save a plan. No sending scheduler is connected yet.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
@@ -295,6 +368,12 @@ struct CampaignEditorView: View {
                     columnPicker("Phone (required)", selected: $model.mapping.phone, columns: info.columns)
                     columnPicker("Name (optional)", selected: $model.mapping.name, columns: info.columns)
                     columnPicker("Email (optional)", selected: $model.mapping.email, columns: info.columns)
+                    columnPicker("SMS permission", selected: $model.mapping.permission, columns: info.columns)
+                    columnPicker("Permission evidence", selected: $model.mapping.evidence, columns: info.columns)
+                    columnPicker("Opted out", selected: $model.mapping.optout, columns: info.columns)
+                    Toggle("I reviewed permission for this business’s marketing texts", isOn: $model.mapping.permissionAttested)
+                    Text("SMS permission: recorded, yes or true needs evidence of at least 8 characters and your review confirmation. Unknown or blank is not consent; revoked, no, false, opted_out or opt-out blocks texts. Opted out: true, yes or 1 blocks texts; false, no, 0 or blank does not grant consent. Other values must be corrected before import.")
+                        .font(.footnote).foregroundStyle(.secondary)
                     Button("Preview contacts") { Task { await model.previewUpload() } }
                         .disabled(!model.mapping.isValid)
                     Button("Remove staged file", role: .destructive) { model.removeUpload() }
@@ -305,6 +384,29 @@ struct CampaignEditorView: View {
                     LabeledContent("New contacts", value: String(preview.imported))
                     LabeledContent("Duplicates", value: String(preview.duplicates))
                     LabeledContent("Invalid rows", value: String(preview.invalid))
+                    if let eligible = preview.eligible_count, let excluded = preview.excluded_count {
+                        LabeledContent("Eligible contacts", value: String(eligible))
+                        LabeledContent("Excluded contacts", value: String(excluded))
+                        Toggle("Show eligible contacts only", isOn: $eligiblePreviewOnly)
+                        ForEach((preview.contacts ?? []).filter { !eligiblePreviewOnly || $0.eligible_for_sms }) { contact in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(contact.name.isEmpty ? contact.phone : contact.name).font(.headline)
+                                Text("Row \(contact.row_number) · \(contact.phone)").font(.footnote)
+                                LabeledContent("SMS permission", value: contact.sms_permission)
+                                LabeledContent("Opted out", value: contact.opted_out ? "Yes" : "No")
+                                ForEach(contact.exclusion_reasons, id: \.self) { Text($0).font(.footnote).foregroundStyle(.secondary) }
+                            }
+                        }
+                        if preview.contacts_truncated == true {
+                            Text("Showing up to 100 eligible and 100 excluded contacts. Counts cover the full file.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Text("This filter changes the preview only. All valid contacts and preferences are saved for review. Only eligible contacts become campaign recipients; changing this display filter never selects excluded contacts.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        Text("Eligibility preview needs the updated backend. Missing permission does not allow texts.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                     if !preview.issues.isEmpty {
                         DisclosureGroup("Review row issues") {
                             ForEach(Array(preview.issues.enumerated()), id: \.offset) { _, issue in
@@ -364,6 +466,11 @@ struct PracticeConversationView: View {
                                 Text("Test outcome").font(.headline)
                                 Text(decision.reason)
                                 if !decision.handoff_summary.isEmpty { Text(decision.handoff_summary) }
+                                if decision.strong_response == true {
+                                    Text("Strong response").font(.headline)
+                                    Text(decision.signal_reason ?? "")
+                                    Text(decision.signal_evidence ?? "")
+                                }
                                 Text("This is simulated. No real handoff or booking occurred.")
                                     .font(.footnote).foregroundStyle(.secondary)
                             }

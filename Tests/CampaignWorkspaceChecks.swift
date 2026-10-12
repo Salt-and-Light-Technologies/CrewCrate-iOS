@@ -38,7 +38,7 @@ private actor WorkspaceFake: CampaignWorkspaceServicing {
             messages: [PracticeMessage(id: UUID(), role: "user", text: text, request_id: request)], decisions: [])
     }
     func columns(business: UUID, upload: ContactUpload, sheet: String) async throws -> UploadColumns {
-        UploadColumns(columns: ["Phone", "Name", "Email"], sheets: [], selected_sheet: nil)
+        UploadColumns(columns: ["Phone", "Name", "Email", "SMS permission", "Permission evidence", "Opted out"], sheets: [], selected_sheet: nil)
     }
     func preview(business: UUID, upload: ContactUpload, mapping: UploadMapping) async throws -> UploadPreview {
         UploadPreview(partner_revision: 7, total_rows: 2, imported: 1, duplicates: 0, invalid: 1,
@@ -88,15 +88,88 @@ struct CampaignWorkspaceChecks {
         originalSettings.lead_ids = [UUID()]
         originalSettings.daily_limit = 72
         originalSettings.start_minute = 30
+        originalSettings.start_date = "2026-10-12"
+        originalSettings.end_date = "2026-10-19"
+        let encodedPlan = try JSONEncoder().encode(originalSettings)
+        let decodedPlan = try JSONDecoder().decode(CampaignSettings.self, from: encodedPlan)
+        precondition(decodedPlan.start_date == "2026-10-12" && decodedPlan.end_date == "2026-10-19")
+        var legacyJSON = try JSONSerialization.jsonObject(with: encodedPlan) as! [String: Any]
+        legacyJSON.removeValue(forKey: "start_date"); legacyJSON.removeValue(forKey: "end_date")
+        let legacyPlan = try JSONDecoder().decode(CampaignSettings.self,
+            from: JSONSerialization.data(withJSONObject: legacyJSON))
+        precondition(legacyPlan.start_date == nil && legacyPlan.end_date == nil)
         let original = sampleCampaign(originalSettings, business: business.id)
         let editor = CampaignEditorModel(business: business, original: original, service: service, reader: ReaderFake())
+        editor.settings.ai_name = "Old custom name"
+        precondition(editor.designatedAIName == "Old custom name")
+        editor.designatedAIName = "Olivia"
+        _ = await editor.save()
+        let selectedIdentity = await service.savedSettings
+        precondition(selectedIdentity?.ai_name == "Olivia")
+        editor.settings.ai_name = nil
+        precondition(editor.designatedAIName == "AI Assistant")
+        editor.settings.ai_name = "   "
+        precondition(editor.designatedAIName == "AI Assistant")
+        editor.settings = originalSettings
+        precondition(editor.hasDateRange)
+        let selectedDate = editor.campaignDate(isStart: true)
+        editor.settings.time_zone = "Pacific/Auckland"
+        precondition(editor.campaignDate(isStart: true) == selectedDate)
+        editor.setCampaignDate(editor.campaignDate(isStart: false), isStart: true)
+        precondition(editor.canSave) // Same-day inclusive range is valid.
+        editor.settings.end_date = "2026-10-12"
+        precondition(!editor.canSave && editor.sendingPlanError != nil)
+        editor.setDateRangeEnabled(false)
+        precondition(!editor.hasDateRange && editor.canSave)
+        editor.setDateRangeEnabled(true)
+        precondition(editor.hasDateRange && editor.canSave)
+        editor.settings = originalSettings
+        // Direct numeric entry rejects incomplete/out-of-range/pasted invalid text
+        // without silently submitting the old value, then recovers on a valid edit.
+        for text in ["", "0", "1001", "-1", "1.5", "abc", "999999999999999999999999"] {
+            editor.dailyLimitInput = text
+            precondition(!editor.canSave && editor.sendingPlanError != nil)
+            precondition(editor.settings.daily_limit == 72)
+        }
+        editor.dailyLimitInput = "1000"
+        precondition(editor.canSave && editor.settings.daily_limit == 1000)
+        _ = await editor.save()
+        let boundarySettings = await service.savedSettings
+        precondition(boundarySettings?.daily_limit == 1000)
+        editor.dailyLimitInput = "1001"
+        precondition(!editor.canSave && editor.settings.daily_limit == 1000)
+        editor.dailyLimitInput = "1"
+        precondition(editor.canSave && editor.settings.daily_limit == 1)
+        for text in ["", "4", "-1", "2.5", "abc"] {
+            editor.followUpInput = text
+            precondition(!editor.canSave && editor.settings.follow_up_limit == 1)
+        }
+        editor.followUpInput = "0"
+        precondition(editor.canSave && editor.settings.follow_up_limit == 0)
+        editor.followUpInput = "3"
+        precondition(editor.canSave && editor.settings.follow_up_limit == 3)
+        let startClock = editor.sendingTime(isStart: true)
+        editor.settings.time_zone = "America/Los_Angeles"
+        precondition(editor.sendingTime(isStart: true) == startClock)
+        editor.setSendingTime(startClock, isStart: false)
+        precondition(!editor.canSave) // Equal start/end is an invalid window.
+        editor.setSendingTime(editor.sendingTimeRange.upperBound, isStart: false)
+        precondition(editor.settings.end_hour == 17 && editor.settings.end_minute == 0 && editor.canSave)
+        let parts = editor.sendingPlanCalendar.dateComponents([.hour, .minute], from: startClock)
+        precondition(parts.hour == 9 && parts.minute == 30)
+        editor.settings = originalSettings
+        editor.dailyLimitInput = nil; editor.followUpInput = nil
         editor.settings.name = "New name"
         _ = await editor.save()
         let sentSettings = await service.savedSettings
         precondition(sentSettings?.lead_ids == originalSettings.lead_ids)
         precondition(sentSettings?.daily_limit == 72 && sentSettings?.start_minute == 30)
+        precondition(sentSettings?.start_date == "2026-10-12" && sentSettings?.end_date == "2026-10-19")
         await editor.selectFile(URL(fileURLWithPath: "/private/tmp/contacts.csv"))
         precondition(editor.mapping.phone == "Phone" && !editor.canSave)
+        precondition(editor.mapping.permission == "SMS permission" && editor.mapping.evidence == "Permission evidence")
+        precondition(editor.mapping.optout == "Opted out" && !editor.mapping.permissionAttested)
+        editor.mapping.permissionAttested = true
         await editor.previewUpload()
         precondition(editor.canSave)
         editor.mapping.name = "Email"
@@ -108,8 +181,10 @@ struct CampaignWorkspaceChecks {
         await service.setSaveFailure()
         _ = await editor.save()
         precondition(editor.saveOutcomeUnknown && !editor.canSave && editor.settings.name == "New name")
+        editor.dailyLimitInput = ""
         await editor.reloadSaved()
         precondition(!editor.saveOutcomeUnknown && editor.settings.name == "Server version")
+        precondition(editor.dailyLimitInput == nil && editor.followUpInput == nil && editor.canSave)
 
         let practice = PracticeConversationModel(business: business.id, settings: originalSettings, service: service)
         await practice.start()
@@ -133,13 +208,33 @@ struct CampaignWorkspaceChecks {
         let upload = ContactUpload(filename: "contacts.csv", data: Data("Phone\n15551234567".utf8))
         let preview = UploadPreview(partner_revision: 9, total_rows: 1, imported: 1, duplicates: 0, invalid: 0,
             issues: [], issues_truncated: false)
+        let permissionMapping = UploadMapping(phone: "Phone", permission: "SMS permission",
+            evidence: "Permission evidence", optout: "Opted out", permissionAttested: true)
         _ = try await session.saveUpload(business: business.id, original: original, settings: originalSettings,
-            upload: upload, mapping: UploadMapping(phone: "Phone"), preview: preview)
+            upload: upload, mapping: permissionMapping, preview: preview)
         let multipart = await transport.requests[1]
         let body = String(decoding: multipart.httpBody!, as: UTF8.self)
         precondition(multipart.url!.path.hasSuffix("/campaign-import"))
         precondition(body.contains("name=\"expected_partner_revision\"\r\n\r\n9"))
         precondition(body.contains("name=\"campaign_id\""))
+        precondition(body.contains("name=\"eligible_recipients_only\"\r\n\r\ntrue"))
+        precondition(body.contains("\"permission\":\"SMS permission\""))
+        precondition(body.contains("\"evidence\":\"Permission evidence\""))
+        precondition(body.contains("\"optout\":\"Opted out\""))
+        precondition(body.contains("name=\"permission_attested\"\r\n\r\ntrue"))
+        let previewJSON = Data("{\"partner_revision\":9,\"total_rows\":1,\"imported\":1,\"duplicates\":0,\"invalid\":0,\"issues\":[],\"issues_truncated\":false,\"eligible_count\":0,\"excluded_count\":1,\"contacts\":[],\"contacts_truncated\":false}".utf8)
+        let previewTransport = TransportFake(response: previewJSON)
+        let previewSession = SupabaseSession(store: SessionStoreFake(session: AuthSession(accessToken: "test-token",
+            refreshToken: "test-refresh", expiresAt: Date().addingTimeInterval(3600), userID: UUID())), transport: previewTransport)
+        _ = try await previewSession.restore()
+        let permissionPreview = try await previewSession.preview(business: business.id, upload: upload, mapping: permissionMapping)
+        precondition(permissionPreview.eligible_count == 0 && permissionPreview.excluded_count == 1)
+        let previewRequest = await previewTransport.requests[0]
+        let previewBody = String(decoding: previewRequest.httpBody!, as: UTF8.self)
+        precondition(previewBody.contains("\"permission\":\"SMS permission\""))
+        precondition(previewBody.contains("\"evidence\":\"Permission evidence\""))
+        precondition(previewBody.contains("\"optout\":\"Opted out\""))
+        precondition(previewBody.contains("name=\"permission_attested\"\r\n\r\ntrue"))
 
         let optedOut = WorkspaceContact(id: UUID(), name: "Sam", phone: "13125550123", email: "sam@example.com",
             status: "excluded", revision: 4, sms_permission: "revoked", permission_evidence: "Asked to stop",
